@@ -2,37 +2,105 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+# --------------------------------------------------
+# SAYFA AYARI
+# --------------------------------------------------
 st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 
-# --- CSS ---
+# --------------------------------------------------
+# PREMIUM DARK CSS (Renk Paleti & KPI Düzenlemesi)
+# --------------------------------------------------
 st.markdown("""
 <style>
-.kpi-card {
-    background-color: white;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0px 3px 8px rgba(0,0,0,0.12);
-    text-align: center;
-}
-.kpi-title {
-    font-size: 16px;
-    color: #374151;
-    font-weight: 600;
-}
-.kpi-value {
-    font-size: 30px;
-    font-weight: 800;
-    color: #111827;
-}
+    /* Ana Uygulama Arka Planı */
+    .stApp {
+        background-color: #0F172A;
+        color: #F8FAFC;
+    }
+
+    /* Üst Boşluk Ayarı */
+    .main > div {
+        padding-top: 1rem;
+    }
+
+    /* Sidebar Rengi */
+    section[data-testid="stSidebar"] {
+        background-color: #1E293B !important;
+    }
+
+    /* KPI Kartları (Simetri ve Sığma Ayarı Yapıldı) */
+    .kpi-card {
+        background: rgba(30, 41, 59, 0.7);
+        padding: 15px 10px; /* İç boşluklar optimize edildi */
+        border-radius: 16px;
+        box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.4);
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: transform 0.3s ease;
+        
+        /* Tüm kutuların boyunu eşitlemek için */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        height: 110px; /* Sabit yükseklik */
+        overflow: hidden; /* Taşmayı önle */
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        border-color: #38BDF8;
+    }
+
+    .kpi-title {
+        font-size: 13px; /* Hafif küçültüldü */
+        color: #94A3B8;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 6px;
+        white-space: nowrap; /* Başlığın sığmasını sağla */
+    }
+
+    .kpi-value {
+        font-size: 24px; /* TL işaretiyle sığması için optimize edildi */
+        font-weight: 800;
+        color: #38BDF8; /* Parlak Mavi Metin */
+        white-space: nowrap; /* Değerin tek satırda kalmasını sağla */
+        overflow: hidden;
+        text-overflow: ellipsis; /* Çok uzunsa üç nokta koy (taşmayı önler) */
+    }
+
+    /* Tab Başlıkları */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #94A3B8;
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #38BDF8 !important;
+        border-bottom-color: #38BDF8 !important;
+    }
+
+    /* Metin Renkleri */
+    h1, h2, h3, .stSubheader, p {
+        color: #F8FAFC !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
+# Başlık en üstte
 st.title("📊 Polipedia Analiz")
 
-# --- EXCEL ---
+# Sekmeler
+tab1, tab2 = st.tabs(["📊 Dashboard", "💰 Muhasebe"])
+
+# --------------------------------------------------
+# VERİ KAYNAĞI
+# --------------------------------------------------
 excel_url = "https://raw.githubusercontent.com/berkguzeler-sys/Sigorta-Dashboard/main/Acente_Analiz.xlsx"
 
-# --- SIDEBAR ---
 st.sidebar.header("📂 Veri Kaynağı")
 uploaded_file = st.sidebar.file_uploader("Excel yükle", type=["xlsx"])
 
@@ -50,19 +118,35 @@ except Exception as e:
     st.write(e)
     st.stop()
 
-# --- TEMİZLEME ---
+# --------------------------------------------------
+# TEMİZLEME
+# --------------------------------------------------
 df.columns = df.columns.str.strip()
 
-# --- TARİH ---
 df["Tanzim Tarihi"] = pd.to_datetime(df["Tanzim Tarihi"], errors="coerce")
 df = df[df["Tanzim Tarihi"].notna()].copy()
+
 df["Ay"] = df["Tanzim Tarihi"].dt.to_period("M").astype(str)
 
-# --- YENİ KOLONLAR ---
-df["Acente Adet"] = (df["Acente Mi?"] == 1).astype(int)
-df["Polipedia Adet"] = (df["Acente Mi?"] == 0).astype(int)
+# Yardımcı kolonlar
+if "Acente Mi?" in df.columns:
+    df["Acente Adet"] = (df["Acente Mi?"] == 1).astype(int)
+    df["Polipedia Adet"] = (df["Acente Mi?"] == 0).astype(int)
+else:
+    df["Acente Adet"] = 0
+    df["Polipedia Adet"] = 0
 
-# --- FİLTRELER ---
+# Eksikse güvenli kolon üret
+for col in ["Net Prim", "Poliçe No", "Dış Acente Adı", "Poliçe Türü", "Acente Net Prim", "Asıl Komisyon", "Acente Komisyon Kazancı", "Polipedia Komisyon Kazancı"]:
+    if col not in df.columns:
+        if col in ["Net Prim", "Acente Net Prim", "Asıl Komisyon", "Acente Komisyon Kazancı", "Polipedia Komisyon Kazancı"]:
+            df[col] = 0
+        else:
+            df[col] = ""
+
+# --------------------------------------------------
+# SIDEBAR FİLTRELER
+# --------------------------------------------------
 st.sidebar.header("🔎 Filtreler")
 
 min_date = df["Tanzim Tarihi"].min().date()
@@ -88,12 +172,12 @@ if isinstance(date_range, tuple) and len(date_range) == 2:
 
 poliçe = st.sidebar.multiselect(
     "Poliçe Türü",
-    sorted(df_filtre["Poliçe Türü"].dropna().unique())
+    sorted(df_filtre["Poliçe Türü"].dropna().astype(str).unique())
 )
 
 acente = st.sidebar.multiselect(
     "Acente",
-    sorted(df_filtre["Dış Acente Adı"].dropna().unique())
+    sorted(df_filtre["Dış Acente Adı"].dropna().astype(str).unique())
 )
 
 if poliçe:
@@ -102,265 +186,451 @@ if poliçe:
 if acente:
     df_filtre = df_filtre[df_filtre["Dış Acente Adı"].isin(acente)]
 
-# Filtre sonrası Ay kolonunu yeniden garantiye al
 df_filtre["Ay"] = df_filtre["Tanzim Tarihi"].dt.to_period("M").astype(str)
 
-# --- KPI ---
-toplam_poliçe = df_filtre["Poliçe No"].count()
-toplam_net_prim = df_filtre["Net Prim"].sum()
-toplam_acente_adet = df_filtre["Acente Adet"].sum()
-toplam_polipedia_adet = df_filtre["Polipedia Adet"].sum()
-toplam_acente_komisyon = df_filtre["Acente Komisyon Kazancı"].sum()
-toplam_polipedia_komisyon = df_filtre["Polipedia Komisyon Kazancı"].sum()
+# --------------------------------------------------
+# PREMIUM RENK PALETİ VE RENK HARİTASI
+# --------------------------------------------------
+premium_colors = ["#38BDF8", "#818CF8", "#34D399", "#FB923C", "#F472B6", "#A78BFA", "#F87171", "#2DD4BF", "#E879F9", "#94A3B8"]
 
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+# Poliçe Türleri için Sabit Renk Haritası
+unique_types = sorted(df["Poliçe Türü"].dropna().astype(str).unique())
+color_map = {ptype: premium_colors[i % len(premium_colors)] for i, ptype in enumerate(unique_types)}
 
-def kpi(title, val):
-    return f"""
-    <div class="kpi-card">
-        <div class="kpi-title">{title}</div>
-        <div class="kpi-value">{val}</div>
-    </div>
-    """
+# --------------------------------------------------
+# DASHBOARD
+# --------------------------------------------------
+with tab1:
+    # KPI
+    toplam_poliçe = df_filtre["Poliçe No"].count()
+    toplam_net_prim = pd.to_numeric(df_filtre["Net Prim"], errors="coerce").fillna(0).sum()
+    toplam_acente_adet = pd.to_numeric(df_filtre["Acente Adet"], errors="coerce").fillna(0).sum()
+    toplam_polipedia_adet = pd.to_numeric(df_filtre["Polipedia Adet"], errors="coerce").fillna(0).sum()
+    toplam_acente_komisyon = pd.to_numeric(df_filtre["Acente Komisyon Kazancı"], errors="coerce").fillna(0).sum()
+    toplam_polipedia_komisyon = pd.to_numeric(df_filtre["Polipedia Komisyon Kazancı"], errors="coerce").fillna(0).sum()
 
-col1.markdown(kpi("Toplam Poliçe", f"{toplam_poliçe:,}"), unsafe_allow_html=True)
-col2.markdown(kpi("Net Prim", f"{toplam_net_prim:,.0f}"), unsafe_allow_html=True)
-col3.markdown(kpi("Acente Adet", f"{toplam_acente_adet:,}"), unsafe_allow_html=True)
-col4.markdown(kpi("Polipedia Adet", f"{toplam_polipedia_adet:,}"), unsafe_allow_html=True)
-col5.markdown(kpi("Acente Komisyon", f"{toplam_acente_komisyon:,.0f}"), unsafe_allow_html=True)
-col6.markdown(kpi("Polipedia Komisyon", f"{toplam_polipedia_komisyon:,.0f}"), unsafe_allow_html=True)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-st.divider()
+    def kpi(title, val):
+        return f"""
+        <div class="kpi-card">
+            <div class="kpi-title">{title}</div>
+            <div class="kpi-value">{val}</div>
+        </div>
+        """
 
-# --- POLİÇE TÜRÜ ANALİZİ ---
-st.subheader("📊 Poliçe Türü Analizi")
+    col1.markdown(kpi("Toplam Poliçe", f"{toplam_poliçe:,}"), unsafe_allow_html=True)
+    col2.markdown(kpi("Net Prim", f"₺{toplam_net_prim:,.0f}"), unsafe_allow_html=True)
+    col3.markdown(kpi("Acente Adet", f"{toplam_acente_adet:,}"), unsafe_allow_html=True)
+    col4.markdown(kpi("Polipedia Adet", f"{toplam_polipedia_adet:,}"), unsafe_allow_html=True)
+    col5.markdown(kpi("Acente Komisyon", f"₺{toplam_acente_komisyon:,.0f}"), unsafe_allow_html=True)
+    col6.markdown(kpi("Polipedia Komisyon", f"₺{toplam_polipedia_komisyon:,.0f}"), unsafe_allow_html=True)
 
-df_ozet = df_filtre.groupby("Poliçe Türü", dropna=False)["Net Prim"].sum().reset_index()
-df_ozet = df_ozet.sort_values(by="Net Prim", ascending=False)
+    st.divider()
 
-grafik = st.radio("Grafik Tipi", ["Bar", "Pie"], horizontal=True)
+    # --------------------------------------------------
+    # POLİÇE TÜRÜ ANALİZİ
+    # --------------------------------------------------
+    st.subheader("📊 Poliçe Türü Analizi")
 
-if grafik == "Bar":
-    fig_policetur = px.bar(df_ozet, x="Poliçe Türü", y="Net Prim")
-else:
-    fig_policetur = px.pie(df_ozet, names="Poliçe Türü", values="Net Prim")
+    col_pt1, col_pt2 = st.columns([1, 1])
 
-st.plotly_chart(fig_policetur, use_container_width=True)
+    with col_pt1:
+        policetur_metric = st.radio(
+            "Gösterilecek Değer",
+            ["Net Prim", "Poliçe Adet"],
+            horizontal=True,
+            key="police_turu_metric"
+        )
 
-st.divider()
+    with col_pt2:
+        grafik = st.radio(
+            "Grafik Tipi",
+            ["Bar", "Pie"],
+            horizontal=True,
+            key="police_turu_grafik"
+        )
 
-# --- GÜNLÜK / AYLIK ANALİZ ---
-st.subheader("📈 Günlük ve Aylık Takip")
+    df_ozet = df_filtre.groupby("Poliçe Türü", dropna=False).agg({
+        "Net Prim": "sum",
+        "Poliçe No": "count"
+    }).reset_index()
 
-metric_secim = st.radio(
-    "Gösterilecek Metrik",
-    ["Net Prim", "Poliçe Adet"],
-    horizontal=True
-)
+    df_ozet.rename(columns={"Poliçe No": "Poliçe Adet"}, inplace=True)
 
-df_gunluk = df_filtre.groupby("Tanzim Tarihi").agg({
-    "Net Prim": "sum",
-    "Poliçe No": "count"
-}).reset_index()
-
-df_aylik = df_filtre.groupby("Ay").agg({
-    "Net Prim": "sum",
-    "Poliçe No": "count"
-}).reset_index()
-
-col_g1, col_g2 = st.columns(2)
-
-with col_g1:
-    st.markdown("**Günlük Analiz**")
-    if metric_secim == "Net Prim":
-        fig_gun = px.line(df_gunluk, x="Tanzim Tarihi", y="Net Prim", markers=True)
+    if policetur_metric == "Net Prim":
+        value_col = "Net Prim"
+        title_text = "Poliçe Türüne Göre Net Prim Dağılımı"
+        text_template = "₺%{y:,.0f}" if grafik == "Bar" else "%{percent}"
     else:
-        fig_gun = px.line(df_gunluk, x="Tanzim Tarihi", y="Poliçe No", markers=True)
-    st.plotly_chart(fig_gun, use_container_width=True)
+        value_col = "Poliçe Adet"
+        title_text = "Poliçe Türüne Göre Poliçe Adet Dağılımı"
+        text_template = "%{y}" if grafik == "Bar" else "%{percent}"
 
-with col_g2:
-    st.markdown("**Aylık Analiz**")
-    if metric_secim == "Net Prim":
-        fig_ay = px.bar(df_aylik, x="Ay", y="Net Prim")
+    df_ozet = df_ozet.sort_values(by=value_col, ascending=False)
+
+    if grafik == "Bar":
+        fig_policetur = px.bar(
+            df_ozet,
+            x="Poliçe Türü",
+            y=value_col,
+            color="Poliçe Türü",
+            color_discrete_map=color_map,
+            text=value_col
+        )
+        fig_policetur.update_traces(
+            texttemplate=text_template,
+            textposition="outside",
+            marker_line_width=0
+        )
+        fig_policetur.update_layout(
+            title=title_text,
+            template="plotly_dark",
+            showlegend=False,
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            xaxis_title="Poliçe Türü",
+            yaxis_title=f"{policetur_metric} (₺)" if policetur_metric == "Net Prim" else policetur_metric,
+            xaxis=dict(tickangle=-20),
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
     else:
-        fig_ay = px.bar(df_aylik, x="Ay", y="Poliçe No")
-    st.plotly_chart(fig_ay, use_container_width=True)
+        fig_policetur = px.pie(
+            df_ozet,
+            names="Poliçe Türü",
+            values=value_col,
+            color="Poliçe Türü",
+            color_discrete_map=color_map,
+            hole=0.45
+        )
+        fig_policetur.update_traces(
+            textinfo="percent+label",
+            pull=[0.03 if i == 0 else 0 for i in range(len(df_ozet))]
+        )
+        fig_policetur.update_layout(
+            title=title_text,
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
 
-st.divider()
+    st.plotly_chart(fig_policetur, use_container_width=True)
 
-# --- ACENTE ANALİZ ---
-st.subheader("📊 Aylık Acente Net Prim (Polipedia Hariç)")
+    st.divider()
 
-df_acente = df_filtre[
-    df_filtre["Dış Acente Adı"].fillna("").str.upper() != "POLIPEDIA"
-].copy()
+    # --------------------------------------------------
+    # GÜNLÜK / AYLIK TAKİP
+    # --------------------------------------------------
+    st.subheader("📈 Günlük ve Aylık Takip")
 
-df_acente_aylik = df_acente.groupby(
-    ["Dış Acente Adı", "Ay"],
-    dropna=False
-)["Acente Net Prim"].sum().reset_index()
-
-pivot = df_acente_aylik.pivot(
-    index="Dış Acente Adı",
-    columns="Ay",
-    values="Acente Net Prim"
-).fillna(0)
-
-pivot_display = pivot.map(lambda x: f"{x:,.0f}") if not pivot.empty else pivot
-st.dataframe(pivot_display, use_container_width=True)
-
-# --- BAREM ---
-def barem(x):
-    if x <= 250000:
-        return "0-250K", 55, 250000 - x
-    elif x <= 500000:
-        return "250K-500K", 60, 500000 - x
-    else:
-        return "500K+", 65, 0
-
-df_acente_aylik[["Barem", "Komisyon %", "Bir Üst Bareme Kalan Tutar"]] = (
-    df_acente_aylik["Acente Net Prim"].apply(lambda x: pd.Series(barem(x)))
-)
-
-# --- KOMİSYONLAR ---
-df_komisyon = df_acente.groupby(
-    ["Dış Acente Adı", "Ay"],
-    dropna=False
-).agg({
-    "Acente Komisyon Kazancı": "sum",
-    "Asıl Komisyon": "sum"
-}).reset_index()
-
-df_acente_aylik = df_acente_aylik.merge(
-    df_komisyon,
-    on=["Dış Acente Adı", "Ay"],
-    how="left"
-)
-
-df_acente_aylik["Asıl Komisyon"] = df_acente_aylik["Asıl Komisyon"].fillna(0)
-df_acente_aylik["Acente Komisyon Kazancı"] = df_acente_aylik["Acente Komisyon Kazancı"].fillna(0)
-
-# --- BAREM TABLO ---
-df_barem = df_acente_aylik[
-    [
-        "Dış Acente Adı",
-        "Ay",
-        "Acente Net Prim",
-        "Asıl Komisyon",
-        "Acente Komisyon Kazancı",
-        "Komisyon %",
-        "Barem",
-        "Bir Üst Bareme Kalan Tutar"
-    ]
-].copy()
-
-# --- FORMAT ---
-df_barem["Acente Net Prim"] = df_barem["Acente Net Prim"].apply(lambda x: f"{x:,.0f}")
-df_barem["Asıl Komisyon"] = df_barem["Asıl Komisyon"].apply(lambda x: f"{x:,.0f}")
-df_barem["Acente Komisyon Kazancı"] = df_barem["Acente Komisyon Kazancı"].apply(lambda x: f"{x:,.0f}")
-df_barem["Bir Üst Bareme Kalan Tutar"] = df_barem["Bir Üst Bareme Kalan Tutar"].apply(lambda x: f"{x:,.0f}")
-
-st.subheader("📊 Barem Analizi")
-st.dataframe(df_barem, use_container_width=True)
-
-st.divider()
-
-# --- DETAY ---
-st.subheader("📋 Detay Veri")
-st.dataframe(
-    df_filtre.sort_values(by="Net Prim", ascending=False),
-    use_container_width=True
-)
-# =========================================================
-# 🔥 YENİ ANALİZ (MULTI + TÜMÜ + % FORMAT)
-# =========================================================
-
-st.subheader("📊 Acente Bazında Aylık Poliçe Türü Oranları")
-
-col1, col2, col3 = st.columns(3)
-
-# --- ACENTE (MULTI + TÜMÜ) ---
-acente_list = sorted(df_filtre["Dış Acente Adı"].dropna().unique())
-acente_list = ["Tümü"] + acente_list
-
-with col1:
-    secili_acente = st.multiselect(
-        "Dış Acente",
-        acente_list,
-        default=["Tümü"]
-    )
-
-# --- AY (MULTI + TÜMÜ) ---
-ay_list = sorted(df_filtre["Ay"].dropna().unique())
-ay_list = ["Tümü"] + ay_list
-
-with col2:
-    secili_ay = st.multiselect(
-        "Ay",
-        ay_list,
-        default=["Tümü"]
-    )
-
-# --- METRİK ---
-with col3:
-    metric = st.radio(
-        "Metrik",
+    metric_secim = st.radio(
+        "Gösterilecek Metrik",
         ["Net Prim", "Poliçe Adet"],
-        horizontal=True
+        horizontal=True,
+        key="gunluk_aylik_metric"
     )
 
-# --- DATA FİLTRE ---
-df_temp = df_filtre.copy()
+    df_gunluk = df_filtre.groupby("Tanzim Tarihi").agg({
+        "Net Prim": "sum",
+        "Poliçe No": "count"
+    }).reset_index()
 
-# ACENTE
-if "Tümü" not in secili_acente:
-    df_temp = df_temp[df_temp["Dış Acente Adı"].isin(secili_acente)]
+    df_aylik = df_filtre.groupby("Ay").agg({
+        "Net Prim": "sum",
+        "Poliçe No": "count"
+    }).reset_index()
 
-# AY
-if "Tümü" not in secili_ay:
-    df_temp = df_temp[df_temp["Ay"].isin(secili_ay)]
+    col_g1, col_g2 = st.columns(2)
 
-if df_temp.empty:
-    st.warning("Seçime uygun veri bulunamadı")
-    st.stop()
+    with col_g1:
+        st.markdown("**Günlük Analiz**")
+        if metric_secim == "Net Prim":
+            fig_gun = px.line(df_gunluk, x="Tanzim Tarihi", y="Net Prim", markers=True, color_discrete_sequence=["#38BDF8"])
+            fig_gun.update_layout(yaxis_title="Net Prim (₺)")
+        else:
+            fig_gun = px.line(df_gunluk, x="Tanzim Tarihi", y="Poliçe No", markers=True, color_discrete_sequence=["#38BDF8"])
+            fig_gun.update_layout(yaxis_title="Poliçe Adet")
 
-# --- GROUP ---
-df_group = df_temp.groupby("Poliçe Türü").agg({
-    "Net Prim": "sum",
-    "Poliçe No": "count"
-}).reset_index()
+        fig_gun.update_layout(template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=20, r=20, t=40, b=20))
+        st.plotly_chart(fig_gun, use_container_width=True)
 
-# --- ORAN ---
-if metric == "Net Prim":
-    df_group["Oran"] = df_group["Net Prim"] / df_group["Net Prim"].sum()
-else:
-    df_group["Oran"] = df_group["Poliçe No"] / df_group["Poliçe No"].sum()
+    with col_g2:
+        st.markdown("**Aylık Analiz**")
+        if metric_secim == "Net Prim":
+            fig_ay = px.bar(df_aylik, x="Ay", y="Net Prim", color_discrete_sequence=["#818CF8"], text="Net Prim")
+            fig_ay.update_traces(texttemplate='₺%{text:,.0f}', textposition='outside')
+            fig_ay.update_layout(yaxis_title="Net Prim (₺)")
+        else:
+            fig_ay = px.bar(df_aylik, x="Ay", y="Poliçe No", color_discrete_sequence=["#818CF8"], text="Poliçe No")
+            fig_ay.update_traces(texttemplate='%{text}', textposition='outside')
+            fig_ay.update_layout(yaxis_title="Poliçe Adet")
 
-# yüzde hesap
-df_group["Oran"] = (df_group["Oran"] * 100)
+        fig_ay.update_layout(template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=20, r=20, t=50, b=20))
+        st.plotly_chart(fig_ay, use_container_width=True)
 
-# --- TABLO (% FORMAT) ---
-st.markdown("### 📋 Oran Tablosu")
+    st.divider()
 
-df_group_display = df_group.copy()
-df_group_display["Oran (%)"] = df_group_display["Oran"].map(lambda x: f"%{x:.2f}")
+    # --------------------------------------------------
+    # ACENTE ANALİZ
+    # --------------------------------------------------
+    st.subheader("📊 Aylık Acente Net Prim (Polipedia Hariç)")
 
-st.dataframe(
-    df_group_display[["Poliçe Türü", "Oran (%)"]],
-    use_container_width=True
-)
+    df_acente = df_filtre[
+        df_filtre["Dış Acente Adı"].fillna("").str.upper() != "POLIPEDIA"
+    ].copy()
 
-# --- PIE CHART ---
-st.markdown("### 🥧 Dağılım Grafiği")
+    df_acente_aylik = df_acente.groupby(
+        ["Dış Acente Adı", "Ay"],
+        dropna=False
+    )["Acente Net Prim"].sum().reset_index()
 
-title_acente = ", ".join(secili_acente)
-title_ay = ", ".join(secili_ay)
+    pivot = df_acente_aylik.pivot(
+        index="Dış Acente Adı",
+        columns="Ay",
+        values="Acente Net Prim"
+    ).fillna(0)
 
-fig = px.pie(
-    df_group,
-    names="Poliçe Türü",
-    values="Oran",
-    title=f"{title_acente} | {title_ay} Dağılım (%)"
-)
+    pivot_display = pivot.map(lambda x: f"₺{x:,.0f}") if not pivot.empty else pivot
+    st.dataframe(pivot_display, use_container_width=True)
 
-st.plotly_chart(fig, use_container_width=True)
+    # --------------------------------------------------
+    # BAREM
+    # --------------------------------------------------
+    def barem(x):
+        if x <= 250000:
+            return "0-250K", 55, 250000 - x
+        elif x <= 500000:
+            return "250K-500K", 60, 500000 - x
+        else:
+            return "500K+", 65, 0
+
+    if not df_acente_aylik.empty:
+        df_acente_aylik[["Barem", "Komisyon %", "Bir Üst Bareme Kalan Tutar"]] = (
+            df_acente_aylik["Acente Net Prim"].apply(lambda x: pd.Series(barem(x)))
+        )
+    else:
+        df_acente_aylik["Barem"] = ""
+        df_acente_aylik["Komisyon %"] = 0
+        df_acente_aylik["Bir Üst Bareme Kalan Tutar"] = 0
+
+    df_komisyon = df_acente.groupby(
+        ["Dış Acente Adı", "Ay"],
+        dropna=False
+    ).agg({
+        "Acente Komisyon Kazancı": "sum",
+        "Asıl Komisyon": "sum"
+    }).reset_index()
+
+    df_acente_aylik = df_acente_aylik.merge(
+        df_komisyon,
+        on=["Dış Acente Adı", "Ay"],
+        how="left"
+    )
+
+    df_acente_aylik["Asıl Komisyon"] = df_acente_aylik["Asıl Komisyon"].fillna(0)
+    df_acente_aylik["Acente Komisyon Kazancı"] = df_acente_aylik["Acente Komisyon Kazancı"].fillna(0)
+
+    df_barem = df_acente_aylik[
+        [
+            "Dış Acente Adı",
+            "Ay",
+            "Acente Net Prim",
+            "Asıl Komisyon",
+            "Acente Komisyon Kazancı",
+            "Komisyon %",
+            "Barem",
+            "Bir Üst Bareme Kalan Tutar"
+        ]
+    ].copy()
+
+    if not df_barem.empty:
+        df_barem["Acente Net Prim"] = df_barem["Acente Net Prim"].apply(lambda x: f"₺{x:,.0f}")
+        df_barem["Asıl Komisyon"] = df_barem["Asıl Komisyon"].apply(lambda x: f"₺{x:,.0f}")
+        df_barem["Acente Komisyon Kazancı"] = df_barem["Acente Komisyon Kazancı"].apply(lambda x: f"₺{x:,.0f}")
+        df_barem["Bir Üst Bareme Kalan Tutar"] = df_barem["Bir Üst Bareme Kalan Tutar"].apply(lambda x: f"₺{x:,.0f}")
+        df_barem["Komisyon %"] = df_barem["Komisyon %"].apply(lambda x: f"%{x}")
+
+    st.subheader("📊 Barem Analizi")
+    st.dataframe(df_barem, use_container_width=True)
+
+    st.divider()
+
+    # --------------------------------------------------
+    # ACENTE BAZINDA AYLIK POLİÇE TÜRÜ ORANLARI (GÜNCELLENDİ)
+    # --------------------------------------------------
+    st.subheader("📊 Acente Bazında Aylık Poliçe Türü Oranları")
+
+    col1, col2, col3 = st.columns(3)
+
+    acente_list = sorted(df_filtre["Dış Acente Adı"].dropna().astype(str).unique())
+    acente_list = ["Tümü"] + acente_list
+
+    with col1:
+        secili_acente = st.multiselect(
+            "Dış Acente",
+            acente_list,
+            default=["Tümü"]
+        )
+
+    ay_list = sorted(df_filtre["Ay"].dropna().astype(str).unique())
+    ay_list = ["Tümü"] + ay_list
+
+    with col2:
+        secili_ay = st.multiselect(
+            "Ay",
+            ay_list,
+            default=["Tümü"]
+        )
+
+    with col3:
+        metric = st.radio(
+            "Metrik",
+            ["Net Prim", "Poliçe Adet"],
+            horizontal=True
+        )
+
+    df_temp = df_filtre.copy()
+
+    if "Tümü" not in secili_acente:
+        df_temp = df_temp[df_temp["Dış Acente Adı"].isin(secili_acente)]
+
+    if "Tümü" not in secili_ay:
+        df_temp = df_temp[df_temp["Ay"].isin(secili_ay)]
+
+    if df_temp.empty:
+        st.warning("Seçime uygun veri bulunamadı")
+    else:
+        df_group = df_temp.groupby("Poliçe Türü").agg({
+            "Net Prim": "sum",
+            "Poliçe No": "count"
+        }).reset_index()
+
+        if metric == "Net Prim":
+            toplam_deger = df_group["Net Prim"].sum()
+            df_group["Oran"] = (df_group["Net Prim"] / toplam_deger * 100) if toplam_deger != 0 else 0
+        else:
+            toplam_deger = df_group["Poliçe No"].sum()
+            df_group["Oran"] = (df_group["Poliçe No"] / toplam_deger * 100) if toplam_deger != 0 else 0
+
+        df_group = df_group.sort_values("Oran", ascending=False)
+
+        df_group_display = df_group.copy()
+        df_group_display["Oran (%)"] = df_group_display["Oran"].map(lambda x: f"%{x:.2f}")
+
+        title_acente = ", ".join(secili_acente)
+        title_ay = ", ".join(secili_ay)
+
+        col_table, col_chart = st.columns([1, 1.8])
+
+        with col_table:
+            st.markdown("### 📋 Oran Tablosu")
+            st.dataframe(
+                df_group_display[["Poliçe Türü", "Oran (%)"]],
+                use_container_width=True,
+                height=350
+            )
+
+        with col_chart:
+            st.markdown("### 🥧 Dağılım Grafiği")
+            # Sabit renkler ve sığma ayarları uygulandı
+            fig = px.pie(
+                df_group,
+                names="Poliçe Türü",
+                values="Oran",
+                title=f"{title_acente} | {title_ay} Dağılım (%)",
+                color="Poliçe Türü",
+                color_discrete_map=color_map,
+                hole=0.40,
+                height=450
+            )
+            fig.update_traces(
+                textinfo="percent+label",
+                textposition="inside" # Grafik küçülmesini engellemek için yazıları içeri alır
+            )
+            fig.update_layout(
+                template="plotly_dark", 
+                paper_bgcolor="rgba(0,0,0,0)", 
+                margin=dict(l=0, r=0, t=50, b=0), # Margin daraltıldı
+                showlegend=True
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+# --------------------------------------------------
+# MUHASEBE TAB (KOMİSYON FARKI ANALİZLİ)
+# --------------------------------------------------
+with tab2:
+    st.subheader("💰 Muhasebe ve Komisyon Düzenleme")
+
+    # 1. Veri Hazırlığı ve İlk Değerlerin Sabitlenmesi
+    if 'df_muhasebe' not in st.session_state:
+        df_init = df_acente_aylik[[
+            "Dış Acente Adı", "Ay", "Acente Net Prim", 
+            "Asıl Komisyon", "Komisyon %", "Acente Komisyon Kazancı"
+        ]].copy()
+        
+        df_init["İlk Kazanç"] = df_init["Acente Komisyon Kazancı"].fillna(0)
+        df_init["Güncel Komisyon Farkı"] = 0.0
+        
+        st.session_state.df_muhasebe = df_init
+
+    st.info("💡 **Komisyon %** değerini değiştirip **'Hesaplamaları Güncelle'** butonuna bastığınızda kazanç ve fark kolonları güncellenir.")
+
+    # 2. Düzenlenebilir Tablo
+    edited_df = st.data_editor(
+        st.session_state.df_muhasebe,
+        column_config={
+            "Dış Acente Adı": st.column_config.TextColumn("Acente", disabled=True),
+            "Ay": st.column_config.TextColumn("Ay", disabled=True),
+            "Acente Net Prim": st.column_config.NumberColumn("Net Prim", format="₺%,.0f", disabled=True),
+            "Asıl Komisyon": st.column_config.NumberColumn("Asıl Komisyon", format="₺%,.0f", disabled=True),
+            "Komisyon %": st.column_config.NumberColumn(
+                "Komisyon %", 
+                min_value=0, max_value=100, format="%d%%"
+            ),
+            "Acente Komisyon Kazancı": st.column_config.NumberColumn(
+                "Güncel Kazanç", format="₺%,.2f", disabled=True
+            ),
+            "Güncel Komisyon Farkı": st.column_config.NumberColumn(
+                "Komisyon Farkı (+/-)", 
+                format="₺%,.2f", 
+                disabled=True,
+                help="Yeni Kazanç - Eski Kazanç"
+            ),
+            "İlk Kazanç": None, 
+        },
+        hide_index=True,
+        use_container_width=True,
+        key="muhasebe_editor_v4"
+    )
+
+    # 3. Güncelleme Butonu ve Matematiksel Hesaplama
+    col_btn1, col_btn2 = st.columns([1, 4])
+    
+    with col_btn1:
+        if st.button("🚀 Hesaplamaları Güncelle", type="primary"):
+            edited_df["Acente Komisyon Kazancı"] = (edited_df["Asıl Komisyon"] * edited_df["Komisyon %"]) / 100
+            edited_df["Güncel Komisyon Farkı"] = edited_df["Acente Komisyon Kazancı"] - edited_df["İlk Kazanç"]
+            st.session_state.df_muhasebe = edited_df
+            st.success("✅ Kazançlar ve farklar hesaplandı!")
+            st.rerun()
+
+    with col_btn2:
+        if st.button("🔄 Verileri Sıfırla"):
+            if 'df_muhasebe' in st.session_state:
+                del st.session_state.df_muhasebe
+                st.rerun()
+
+    # 4. Özet Bilgiler (Alt Toplamlar)
+    st.divider()
+    t1, t2 = st.columns(2)
+    
+    toplam_kazanc = st.session_state.df_muhasebe["Acente Komisyon Kazancı"].sum()
+    toplam_fark = st.session_state.df_muhasebe["Güncel Komisyon Farkı"].sum()
+    
+    t1.metric(label="📊 Güncel Toplam Kazanç", value=f"₺{toplam_kazanc:,.2f}")
+    t2.metric(
+        label="📉 Toplam Fark Etkisi", 
+        value=f"₺{toplam_fark:,.2f}",
+        delta=f"{toplam_fark:,.2f}", 
+        delta_color="normal"
+    )
