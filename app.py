@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
 
 st.set_page_config(page_title="Sigorta Dashboard", layout="wide")
 
@@ -22,10 +21,8 @@ st.markdown("""
 
 st.title("📊 Sigorta Dashboard")
 
-# --- DOSYA YOLU ---
+# 🔥 BURAYA KENDİ EXCEL RAW LINKİNİ KOY
 excel_url = "https://raw.githubusercontent.com/berkguzeler-sys/Sigorta-Dashboard/main/Acente_Analiz.xlsx"
-
-df = pd.read_excel(excel_url)
 
 # --- SIDEBAR ---
 st.sidebar.header("📂 Veri Kaynağı")
@@ -33,23 +30,18 @@ uploaded_file = st.sidebar.file_uploader("Excel yükle (opsiyonel)", type=["xlsx
 
 # --- DATA LOAD ---
 @st.cache_data
-def load_data(path):
-    return pd.read_excel(path)
+def load_data(source):
+    return pd.read_excel(source)
 
-df = None
-
-# Önce upload varsa onu kullan
-if uploaded_file is not None:
-    df = load_data(uploaded_file)
-
-# Yoksa masaüstünden çek
-else:
-    if os.path.exists(file_path):
-        df = load_data(file_path)
+try:
+    if uploaded_file is not None:
+        df = load_data(uploaded_file)
     else:
-        st.error("❌ Dosya bulunamadı!")
-        st.write("Kontrol edilen path:", file_path)
-        st.stop()
+        df = load_data(excel_url)
+except Exception as e:
+    st.error("❌ Veri yüklenemedi!")
+    st.write(e)
+    st.stop()
 
 # --- TEMİZLEME ---
 df.columns = df.columns.str.strip()
