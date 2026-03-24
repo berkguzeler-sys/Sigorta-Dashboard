@@ -22,8 +22,8 @@ st.markdown("""
 
 st.title("📊 Sigorta Dashboard")
 
-# --- DOSYA YOLU (SENİN VERDİĞİN) ---
-file_path = r"C:\Users\Lenovo\Desktop\Üretim Analizi\Acente_Analiz.xlsx"
+# --- DOSYA YOLU ---
+file_path = "C:/Users/Lenovo/Desktop/Üretim Analizi/Acente_Analiz.xlsx"
 
 # --- SIDEBAR ---
 st.sidebar.header("📂 Veri Kaynağı")
@@ -34,24 +34,26 @@ uploaded_file = st.sidebar.file_uploader("Excel yükle (opsiyonel)", type=["xlsx
 def load_data(path):
     return pd.read_excel(path)
 
-try:
-    if uploaded_file is not None:
-        df = load_data(uploaded_file)
+df = None
+
+# Önce upload varsa onu kullan
+if uploaded_file is not None:
+    df = load_data(uploaded_file)
+
+# Yoksa masaüstünden çek
+else:
+    if os.path.exists(file_path):
+        df = load_data(file_path)
     else:
-        if os.path.exists(file_path):
-            df = load_data(file_path)
-        else:
-            st.error("❌ Masaüstündeki dosya bulunamadı!")
-            st.stop()
+        st.error("❌ Dosya bulunamadı!")
+        st.write("Kontrol edilen path:", file_path)
+        st.stop()
 
-except Exception as e:
-    st.error(f"Hata: {e}")
-    st.stop()
-
+# --- TEMİZLEME ---
 df.columns = df.columns.str.strip()
 
 # --- TARİH ---
-df["Tanzim Tarihi"] = pd.to_datetime(df["Tanzim Tarihi"])
+df["Tanzim Tarihi"] = pd.to_datetime(df["Tanzim Tarihi"], errors="coerce")
 df["Ay"] = df["Tanzim Tarihi"].dt.to_period("M").astype(str)
 
 # --- YENİ KOLONLAR ---
@@ -61,8 +63,8 @@ df["Polipedia Adet"] = (df["Acente Mi?"] == 0).astype(int)
 # --- FİLTRELER ---
 st.sidebar.header("🔎 Filtreler")
 
-poliçe = st.sidebar.multiselect("Poliçe Türü", df["Poliçe Türü"].unique())
-acente = st.sidebar.multiselect("Acente", df["Dış Acente Adı"].unique())
+poliçe = st.sidebar.multiselect("Poliçe Türü", df["Poliçe Türü"].dropna().unique())
+acente = st.sidebar.multiselect("Acente", df["Dış Acente Adı"].dropna().unique())
 
 df_filtre = df.copy()
 
