@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="Sigorta Dashboard", layout="wide")
+st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -27,7 +27,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Sigorta Dashboard")
+st.title("📊 Polipedia Analiz")
 
 # --- EXCEL ---
 excel_url = "https://raw.githubusercontent.com/berkguzeler-sys/Sigorta-Dashboard/main/Acente_Analiz.xlsx"
