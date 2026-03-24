@@ -23,7 +23,9 @@ st.markdown("""
 st.title("📊 Sigorta Dashboard")
 
 # --- DOSYA YOLU ---
-file_path = "C:/Users/Lenovo/Desktop/Üretim Analizi/Acente_Analiz.xlsx"
+excel_url = "https://raw.githubusercontent.com/berkguzeler-sys/Sigorta-Dashboard/main/Acente_Analiz.xlsx"
+
+df = pd.read_excel(excel_url)
 
 # --- SIDEBAR ---
 st.sidebar.header("📂 Veri Kaynağı")
