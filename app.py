@@ -567,66 +567,66 @@ with tab1:
             # --- YENİ ANALİZ 1: ÜST BAREME EN YAKIN 5 ACENTE ---
 # ==================================================
 
-st.subheader("🚀 Bir Üst Bareme En Yakın 5 Acente")
+    st.subheader("🚀 Bir Üst Bareme En Yakın 5 Acente")
 
-# SON AYI BUL
-son_ay = df_acente_aylik["Ay"].max()
+    # SON AYI BUL
+    son_ay = df_acente_aylik["Ay"].max()
 
-# SADECE SON AY VERİSİ
-df_yakin = df_acente_aylik[
-    df_acente_aylik["Ay"] == son_ay
-].copy()
+    # SADECE SON AY VERİSİ
+    df_yakin = df_acente_aylik[
+        df_acente_aylik["Ay"] == son_ay
+    ].copy()
 
-# ÜST BAREME GEÇME İHTİMALİ OLANLAR
-df_yakin = df_yakin[df_yakin["Bir Üst Bareme Kalan Tutar"] > 0]
+    # ÜST BAREME GEÇME İHTİMALİ OLANLAR
+    df_yakin = df_yakin[df_yakin["Bir Üst Bareme Kalan Tutar"] > 0]
 
-# EN YAKIN 5 ACENTE
-df_yakin = df_yakin.sort_values("Bir Üst Bareme Kalan Tutar").head(5)
+    # EN YAKIN 5 ACENTE
+    df_yakin = df_yakin.sort_values("Bir Üst Bareme Kalan Tutar").head(5)
 
-if not df_yakin.empty:
-    df_yakin_display = df_yakin.copy()
-    df_yakin_display["Acente Net Prim"] = df_yakin_display["Acente Net Prim"].apply(lambda x: f"₺{x:,.0f}")
-    df_yakin_display["Bir Üst Bareme Kalan Tutar"] = df_yakin_display["Bir Üst Bareme Kalan Tutar"].apply(lambda x: f"₺{x:,.0f}")
+    if not df_yakin.empty:
+        df_yakin_display = df_yakin.copy()
+        df_yakin_display["Acente Net Prim"] = df_yakin_display["Acente Net Prim"].apply(lambda x: f"₺{x:,.0f}")
+        df_yakin_display["Bir Üst Bareme Kalan Tutar"] = df_yakin_display["Bir Üst Bareme Kalan Tutar"].apply(lambda x: f"₺{x:,.0f}")
     
-    st.dataframe(
-        df_yakin_display[
-            ["Dış Acente Adı", "Ay", "Acente Net Prim", "Barem", "Bir Üst Bareme Kalan Tutar"]
-        ],
-        use_container_width=True
-    )
-else:
-    st.info("Uygun veri bulunamadı")
+        st.dataframe(
+            df_yakin_display[
+                ["Dış Acente Adı", "Ay", "Acente Net Prim", "Barem", "Bir Üst Bareme Kalan Tutar"]
+            ],
+            use_container_width=True
+        )
+    else:
+        st.info("Uygun veri bulunamadı")
 
-st.divider()
+    st.divider()
 
 # ==================================================
 # --- YENİ ANALİZ 2: SON 1 AYDIR ÜRETİM YOK ---
 # ==================================================
 
-st.subheader("⚠️ Son 1 Aydır Hiç Üretim Yapmamış Acenteler")
+    st.subheader("⚠️ Son 1 Aydır Hiç Üretim Yapmamış Acenteler")
 
-# Son tarih
-max_tarih = df["Tanzim Tarihi"].max()
+    # Son tarih
+    max_tarih = df["Tanzim Tarihi"].max()
 
-# 30 gün geri
-son_1_ay = max_tarih - pd.Timedelta(days=30)
+    # 30 gün geri
+    son_1_ay = max_tarih - pd.Timedelta(days=30)
 
-# Son 1 ayda üretim yapanlar
-aktif_acente = df[
-    df["Tanzim Tarihi"] >= son_1_ay
-]["Dış Acente Adı"].dropna().unique()
+    # Son 1 ayda üretim yapanlar
+    aktif_acente = df[
+        df["Tanzim Tarihi"] >= son_1_ay
+    ]["Dış Acente Adı"].dropna().unique()
 
-# Tüm acenteler
-tum_acente = df["Dış Acente Adı"].dropna().unique()
+    # Tüm acenteler
+    tum_acente = df["Dış Acente Adı"].dropna().unique()
 
-# Üretim yapmayanlar
-pasif_acente = sorted(set(tum_acente) - set(aktif_acente))
+    # Üretim yapmayanlar
+    pasif_acente = sorted(set(tum_acente) - set(aktif_acente))
 
-if len(pasif_acente) > 0:
-    df_pasif = pd.DataFrame(pasif_acente, columns=["Dış Acente Adı"])
-    st.dataframe(df_pasif, use_container_width=True)
-else:
-    st.success("Tüm acenteler son 1 ayda üretim yapmış 🎯")
+    if len(pasif_acente) > 0:
+        df_pasif = pd.DataFrame(pasif_acente, columns=["Dış Acente Adı"])
+        st.dataframe(df_pasif, use_container_width=True)
+    else:
+        st.success("Tüm acenteler son 1 ayda üretim yapmış 🎯")
 
 # --------------------------------------------------
 # MUHASEBE TAB (KOMİSYON FARKI ANALİZLİ)
