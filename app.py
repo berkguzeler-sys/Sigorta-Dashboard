@@ -99,12 +99,16 @@ tab1, tab2 = st.tabs(["📊 Dashboard", "💰 Muhasebe"])
 # --------------------------------------------------
 # VERİ KAYNAĞI
 # --------------------------------------------------
-excel_url = "https://raw.githubusercontent.com/berkguzeler-sys/Sigorta-Dashboard/main/Acente_Analiz.xlsx"
+import time
+
+excel_url = f"https://raw.githubusercontent.com/berkguzeler-sys/Sigorta-Dashboard/main/Acente_Analiz.xlsx?{int(time.time())}"
 
 st.sidebar.header("📂 Veri Kaynağı")
+if st.sidebar.button("🔄 Veriyi Yenile"):
+    st.cache_data.clear()
 uploaded_file = st.sidebar.file_uploader("Excel yükle", type=["xlsx"])
 
-@st.cache_data
+@st.cache_data(ttl=60)
 def load_data(source):
     return pd.read_excel(source)
 
@@ -117,6 +121,8 @@ except Exception as e:
     st.error("❌ Veri yüklenemedi!")
     st.write(e)
     st.stop()
+
+    
 
 # --------------------------------------------------
 # TEMİZLEME
