@@ -14,107 +14,91 @@ st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 # --------------------------------------------------
 # SADECE CSS BLOĞU DEĞİŞTİ — GERİ KALAN HER ŞEY AYNI
 
+# --------------------------------------------------
+# PREMIUM ADAPTIVE CSS (Karanlık & Aydınlık Tema Uyumu)
+# --------------------------------------------------
+
 st.markdown("""
 <style>
 
-/* 🔥 ANA BACKGROUND (ULTRA PREMIUM MOR) */
+/* 1. ANA ARKA PLAN VE METİN AYARI */
+/* Kullanıcı bilgisayarı beyaz olsa bile bu dashboard'un kendi koyu temasını korumasını sağlar */
 .stApp {
-    background: radial-gradient(circle at top left, #6a2473 0%, #212a35 40%, #020617 100%);
-    color: #F8FAFC;
+    background: radial-gradient(circle at top left, #6a2473 0%, #212a35 40%, #020617 100%) !important;
+    color: #F8FAFC !important;
 }
 
-/* SIDEBAR */
+/* 2. OKUNURLUK FIX (Zorunlu Renk Tanımlamaları) */
+/* Streamlit'in varsayılan beyaz tema yazılarını ezer */
+html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, h5, h6, label {
+    color: #F8FAFC !important;
+}
+
+/* 3. SIDEBAR TEMASI */
 section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1a1f2e, #020617);
-    border-right: 1px solid rgba(255,255,255,0.05);
+    background: linear-gradient(180deg, #1a1f2e, #020617) !important;
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+section[data-testid="stSidebar"] * {
+    color: #F8FAFC !important;
 }
 
-/* KPI CARD (GLASS + MOR TON) */
+/* 4. INPUT VE SELECTBOX AYARLARI (Beyaz ekranda görünmesi için) */
+.stSelectbox div, .stMultiSelect div, .stTextInput div, .stDateInput div {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: white !important;
+}
+
+/* 5. KPI CARD AYARLARI */
 .kpi-card {
     backdrop-filter: blur(16px);
-    background: linear-gradient(145deg, rgba(106,36,115,0.25), rgba(33,42,53,0.7));
+    background: linear-gradient(145deg, rgba(106,36,115,0.3), rgba(33,42,53,0.8));
     border-radius: 18px;
     padding: 15px 10px;
-    border: 1px solid rgba(255,255,255,0.08);
-    box-shadow: 0 12px 35px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.15);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.5);
     transition: all 0.3s ease;
     height: 110px;
+    text-align: center;
 }
 
-/* HOVER EFFECT */
 .kpi-card:hover {
-    transform: translateY(-6px) scale(1.02);
-    box-shadow: 0 20px 50px rgba(233,97,123,0.35);
+    transform: translateY(-5px);
     border-color: #e9617b;
+    box-shadow: 0 15px 40px rgba(233,97,123,0.2);
 }
 
-/* KPI TEXT */
 .kpi-title {
-    font-size: 13px;
-    color: #94A3B8;
-    letter-spacing: 1px;
+    font-size: 12px;
+    color: #CBD5E1 !important; /* Daha parlak gri */
+    font-weight: 500;
+    margin-bottom: 5px;
 }
 
-/* 🔥 GRADIENT VALUE */
 .kpi-value {
-    font-size: 26px;
+    font-size: 24px;
     font-weight: 800;
     background: linear-gradient(90deg, #e9617b, #f5a150);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
-/* TAB AKTİF */
+/* 6. TAB VE METRIC CARD */
 .stTabs [aria-selected="true"] {
     color: #e9617b !important;
     border-bottom: 2px solid #e9617b !important;
 }
 
-/* METRIC CARD */
 .metric-card {
-    backdrop-filter: blur(12px);
-    background: rgba(106,36,115,0.15);
+    background: rgba(255, 255, 255, 0.05);
     padding: 20px;
     border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.06);
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
 }
 
-/* TEXT */
-h1, h2, h3, .stSubheader, p {
-    color: #F8FAFC !important;
-}
-
-/* 🔥 EKLEDİĞİM KISIM (OKUNURLUK FIX) */
-html, body, [class*="css"]  {
-    color: #F8FAFC !important;
-}
-
-label, .stMarkdown, .stText, .stRadio label, .stSelectbox label {
-    color: #F8FAFC !important;
-}
-
-.stMultiSelect div, 
-.stSelectbox div, 
-.stDateInput div,
-.stTextInput div {
-    color: #F8FAFC !important;
-}
-
-input, textarea {
-    color: #F8FAFC !important;
-}
-
-input::placeholder {
-    color: #94A3B8 !important;
-}
-
-section[data-testid="stSidebar"] * {
-    color: #F8FAFC !important;
-}
-
-[data-testid="stAppViewContainer"] {
-    color: #F8FAFC !important;
+/* 7. DATA EDITOR FIX (Tablo içindeki yazıların beyaz kalması için) */
+div[data-testid="stDataEditor"] * {
+    color: white !important;
 }
 
 </style>
