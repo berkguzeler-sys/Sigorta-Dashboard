@@ -85,6 +85,66 @@ h1, h2, h3, .stSubheader, p {
     color: #F8FAFC !important;
 }
 
+/* 🔥 GENEL TEXT FIX */
+html, body, [class*="css"]  {
+    color: #F8FAFC !important;
+}
+
+label, .stMarkdown, .stText, .stRadio label, .stSelectbox label {
+    color: #F8FAFC !important;
+}
+
+.stMultiSelect div, 
+.stSelectbox div, 
+.stDateInput div,
+.stTextInput div {
+    color: #F8FAFC !important;
+}
+
+input, textarea {
+    color: #F8FAFC !important;
+}
+
+input::placeholder {
+    color: #94A3B8 !important;
+}
+
+section[data-testid="stSidebar"] * {
+    color: #F8FAFC !important;
+}
+
+[data-testid="stAppViewContainer"] {
+    color: #F8FAFC !important;
+}
+
+/* 🔥 BAŞLIK FIX (SON DOKUNUŞ) */
+h1, h2, h3, h4, h5, h6 {
+    color: #FFFFFF !important;
+}
+
+[data-testid="stMarkdownContainer"] h1,
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h3,
+[data-testid="stMarkdownContainer"] h4 {
+    color: #FFFFFF !important;
+}
+
+.stSubheader {
+    color: #FFFFFF !important;
+}
+
+button[role="tab"] {
+    color: #FFFFFF !important;
+}
+
+[data-testid="stMetricLabel"] {
+    color: #FFFFFF !important;
+}
+
+[data-testid="stMetricValue"] {
+    color: #FFFFFF !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
