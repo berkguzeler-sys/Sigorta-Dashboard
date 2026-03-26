@@ -202,6 +202,7 @@ premium_colors = ["#38BDF8", "#818CF8", "#34D399", "#FB923C", "#F472B6", "#A78BF
 # Poliçe Türleri için Sabit Renk Haritası
 unique_types = sorted(df["Poliçe Türü"].dropna().astype(str).unique())
 color_map = {ptype: premium_colors[i % len(premium_colors)] for i, ptype in enumerate(unique_types)}
+df_filtre.columns = df_filtre.columns.str.strip()
 
 # --------------------------------------------------
 # DASHBOARD
@@ -214,8 +215,16 @@ with tab1:
     toplam_polipedia_adet = pd.to_numeric(df_filtre["Polipedia Adet"], errors="coerce").fillna(0).sum()
     toplam_acente_komisyon = pd.to_numeric(df_filtre["Acente Komisyon Kazancı"], errors="coerce").fillna(0).sum()
     toplam_polipedia_komisyon = pd.to_numeric(df_filtre["Polipedia Komisyon Kazancı"], errors="coerce").fillna(0).sum()
+    toplam_asil_komisyon = pd.to_numeric(df_filtre["Asıl Komisyon"], errors="coerce").fillna(0).sum()
+    toplam_yk_kazanc = (
+    pd.to_numeric(df_filtre["Polipedia Komisyon Kazancı"], errors="coerce").fillna(0).sum()
+    +
+    pd.to_numeric(df_filtre["Acenteden Gelen Komisyon"], errors="coerce").fillna(0).sum())
+            
 
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    
+
+    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
 
     def kpi(title, val):
         return f"""
@@ -231,6 +240,7 @@ with tab1:
     col4.markdown(kpi("Polipedia Adet", f"{toplam_polipedia_adet:,}"), unsafe_allow_html=True)
     col5.markdown(kpi("Acente Komisyon", f"₺{toplam_acente_komisyon:,.0f}"), unsafe_allow_html=True)
     col6.markdown(kpi("Polipedia Komisyon", f"₺{toplam_polipedia_komisyon:,.0f}"), unsafe_allow_html=True)
+    col7.markdown(kpi("YK Kazanç", f"₺{toplam_yk_kazanc:,.0f}"), unsafe_allow_html=True)
 
     st.divider()
 
@@ -641,48 +651,83 @@ with tab2:
             "Asıl Komisyon", "Komisyon %", "Acente Komisyon Kazancı"
         ]].copy()
         
-        df_init["İlk Kazanç"] = df_init["Acente Komisyon Kazancı"].fillna(0)
+        df_init.rename(columns={
+            "Asıl Komisyon": "Toplam Komisyon",
+            "Acente Komisyon Kazancı": "Acente Toplam Kazanç"
+        }, inplace=True)
+        
+        df_init["İlk Kazanç"] = df_init["Acente Toplam Kazanç"].fillna(0)
+        df_init["İlk Komisyon %"] = df_init["Komisyon %"]
+        
         df_init["Güncel Komisyon Farkı"] = 0.0
+        df_init["Acenteye Ödenen Komisyon"] = None
+        df_init["Kalan Komisyon Tutarı"] = 0.0
         
         st.session_state.df_muhasebe = df_init
 
-    st.info("💡 **Komisyon %** değerini değiştirip **'Hesaplamaları Güncelle'** butonuna bastığınızda kazanç ve fark kolonları güncellenir.")
+    st.info("💡 **Komisyon %** değiştir → Güncelle. Ödenen komisyonu manuel gir.")
 
-    # 2. Düzenlenebilir Tablo
+    # 2. Tablo
     edited_df = st.data_editor(
         st.session_state.df_muhasebe,
         column_config={
             "Dış Acente Adı": st.column_config.TextColumn("Acente", disabled=True),
             "Ay": st.column_config.TextColumn("Ay", disabled=True),
             "Acente Net Prim": st.column_config.NumberColumn("Net Prim", format="₺%,.0f", disabled=True),
-            "Asıl Komisyon": st.column_config.NumberColumn("Asıl Komisyon", format="₺%,.0f", disabled=True),
+
+            "Toplam Komisyon": st.column_config.NumberColumn("Toplam Komisyon", format="₺%,.0f", disabled=True),
+
             "Komisyon %": st.column_config.NumberColumn(
-                "Komisyon %", 
-                min_value=0, max_value=100, format="%d%%"
+                "Komisyon %", min_value=0, max_value=100, format="%d%%"
             ),
-            "Acente Komisyon Kazancı": st.column_config.NumberColumn(
-                "Güncel Kazanç", format="₺%,.2f", disabled=True
+
+            "Acente Toplam Kazanç": st.column_config.NumberColumn(
+                "Acente Toplam Kazanç", format="₺%,.2f", disabled=True
             ),
+
+            "Acenteye Ödenen Komisyon": st.column_config.NumberColumn(
+                "Acenteye Ödenen Komisyon", format="₺%,.2f"
+            ),
+
+            # 🆕 Artık yüzde fark gösteriyor
             "Güncel Komisyon Farkı": st.column_config.NumberColumn(
-                "Komisyon Farkı (+/-)", 
-                format="₺%,.2f", 
-                disabled=True,
-                help="Yeni Kazanç - Eski Kazanç"
+                "Komisyon Farkı (puan)", format="%d", disabled=True
             ),
-            "İlk Kazanç": None, 
+
+            "Kalan Komisyon Tutarı": st.column_config.NumberColumn(
+                "Kalan Komisyon Tutarı", format="₺%,.2f", disabled=True
+            ),
+
+            "İlk Kazanç": None,
+            "İlk Komisyon %": None,
         },
         hide_index=True,
         use_container_width=True,
         key="muhasebe_editor_v4"
     )
 
-    # 3. Güncelleme Butonu ve Matematiksel Hesaplama
+    # 3. Güncelleme
     col_btn1, col_btn2 = st.columns([1, 4])
     
     with col_btn1:
         if st.button("🚀 Hesaplamaları Güncelle", type="primary"):
-            edited_df["Acente Komisyon Kazancı"] = (edited_df["Asıl Komisyon"] * edited_df["Komisyon %"]) / 100
-            edited_df["Güncel Komisyon Farkı"] = edited_df["Acente Komisyon Kazancı"] - edited_df["İlk Kazanç"]
+
+            # Yeni kazanç
+            edited_df["Acente Toplam Kazanç"] = (
+                edited_df["Toplam Komisyon"] * edited_df["Komisyon %"]
+            ) / 100
+
+            # 🆕 YÜZDE PUAN FARKI (ANA DEĞİŞİKLİK)
+            edited_df["Güncel Komisyon Farkı"] = (
+                edited_df["Komisyon %"] - edited_df["İlk Komisyon %"]
+            )
+
+            # Kalan komisyon
+            edited_df["Kalan Komisyon Tutarı"] = (
+                edited_df["Acente Toplam Kazanç"] - 
+                edited_df["Acenteye Ödenen Komisyon"].fillna(0)
+            )
+
             st.session_state.df_muhasebe = edited_df
             st.success("✅ Kazançlar ve farklar hesaplandı!")
             st.rerun()
@@ -693,17 +738,14 @@ with tab2:
                 del st.session_state.df_muhasebe
                 st.rerun()
 
-    # 4. Özet Bilgiler (Alt Toplamlar)
+    # 4. Özet
     st.divider()
-    t1, t2 = st.columns(2)
+    t1, t2, t3 = st.columns(3)
     
-    toplam_kazanc = st.session_state.df_muhasebe["Acente Komisyon Kazancı"].sum()
+    toplam_kazanc = st.session_state.df_muhasebe["Acente Toplam Kazanç"].sum()
     toplam_fark = st.session_state.df_muhasebe["Güncel Komisyon Farkı"].sum()
+    toplam_kalan = st.session_state.df_muhasebe["Kalan Komisyon Tutarı"].sum()
     
-    t1.metric(label="📊 Güncel Toplam Kazanç", value=f"₺{toplam_kazanc:,.2f}")
-    t2.metric(
-        label="📉 Toplam Fark Etkisi", 
-        value=f"₺{toplam_fark:,.2f}",
-        delta=f"{toplam_fark:,.2f}", 
-        delta_color="normal"
-    )
+    t1.metric("📊 Acente Toplam Kazanç", f"₺{toplam_kazanc:,.2f}")
+    t2.metric("📉 Toplam Fark (puan)", f"{toplam_fark:,.0f}")
+    t3.metric("💰 Kalan Komisyon", f"₺{toplam_kalan:,.2f}")
