@@ -12,93 +12,92 @@ st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 # --------------------------------------------------
 # PREMIUM DARK CSS (Renk Paleti & KPI Düzenlemesi)
 # --------------------------------------------------
-# SADECE CSS BLOĞU DEĞİŞTİ — GERİ KALAN HER ŞEY AYNI
-
-# --------------------------------------------------
-# PREMIUM ADAPTIVE CSS (Karanlık & Aydınlık Tema Uyumu)
-# --------------------------------------------------
+# BEYAZ EKRAN FIXLERI EKLENMİŞ HALİ
 
 st.markdown("""
 <style>
 
-/* 1. ANA ARKA PLAN VE METİN AYARI */
-/* Kullanıcı bilgisayarı beyaz olsa bile bu dashboard'un kendi koyu temasını korumasını sağlar */
+/* 🔥 ANA BACKGROUND (ULTRA PREMIUM MOR) - BEYAZ EKRANDA BİLE SABİT */
 .stApp {
     background: radial-gradient(circle at top left, #6a2473 0%, #212a35 40%, #020617 100%) !important;
     color: #F8FAFC !important;
 }
 
-/* 2. OKUNURLUK FIX (Zorunlu Renk Tanımlamaları) */
-/* Streamlit'in varsayılan beyaz tema yazılarını ezer */
-html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, h5, h6, label {
-    color: #F8FAFC !important;
-}
-
-/* 3. SIDEBAR TEMASI */
+/* SIDEBAR */
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1a1f2e, #020617) !important;
-    border-right: 1px solid rgba(255,255,255,0.1);
-}
-section[data-testid="stSidebar"] * {
-    color: #F8FAFC !important;
+    border-right: 1px solid rgba(255,255,255,0.05);
 }
 
-/* 4. INPUT VE SELECTBOX AYARLARI (Beyaz ekranda görünmesi için) */
-.stSelectbox div, .stMultiSelect div, .stTextInput div, .stDateInput div {
-    background-color: rgba(255, 255, 255, 0.05) !important;
-    color: white !important;
-}
-
-/* 5. KPI CARD AYARLARI */
+/* KPI CARD (GLASS + MOR TON) */
 .kpi-card {
     backdrop-filter: blur(16px);
-    background: linear-gradient(145deg, rgba(106,36,115,0.3), rgba(33,42,53,0.8));
+    background: linear-gradient(145deg, rgba(106,36,115,0.25), rgba(33,42,53,0.7));
     border-radius: 18px;
     padding: 15px 10px;
-    border: 1px solid rgba(255,255,255,0.15);
-    box-shadow: 0 12px 35px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.6);
     transition: all 0.3s ease;
     height: 110px;
-    text-align: center;
 }
 
+/* HOVER EFFECT */
 .kpi-card:hover {
-    transform: translateY(-5px);
-    border-color: #e9617b;
-    box-shadow: 0 15px 40px rgba(233,97,123,0.2);
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 20px 50px rgba(233,97,123,0.35);
+    border-color: #e9617b !important;
 }
 
+/* KPI TEXT */
 .kpi-title {
-    font-size: 12px;
-    color: #CBD5E1 !important; /* Daha parlak gri */
-    font-weight: 500;
-    margin-bottom: 5px;
+    font-size: 13px;
+    color: #94A3B8 !important;
+    letter-spacing: 1px;
 }
 
+/* 🔥 GRADIENT VALUE */
 .kpi-value {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 800;
     background: linear-gradient(90deg, #e9617b, #f5a150);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
-/* 6. TAB VE METRIC CARD */
+/* TAB AKTİF */
 .stTabs [aria-selected="true"] {
     color: #e9617b !important;
     border-bottom: 2px solid #e9617b !important;
 }
 
+/* METRIC CARD */
 .metric-card {
-    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    background: rgba(106,36,115,0.15);
     padding: 20px;
     border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
 }
 
-/* 7. DATA EDITOR FIX (Tablo içindeki yazıların beyaz kalması için) */
-div[data-testid="stDataEditor"] * {
-    color: white !important;
+/* 🔥 OKUNURLUK FIX (BEYAZ EKRAN İÇİN KRİTİK) */
+html, body, [class*="css"], .stMarkdown, .stText, .stSubheader, p, h1, h2, h3, label {
+    color: #F8FAFC !important;
+}
+
+/* SEÇİM KUTULARI ARKA PLANI */
+.stMultiSelect div, .stSelectbox div, .stDateInput div, .stTextInput div {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: #F8FAFC !important;
+}
+
+/* TABLO İÇİ YAZILAR */
+div[data-testid="stDataFrame"] * {
+    color: #F8FAFC !important;
+}
+
+section[data-testid="stSidebar"] * {
+    color: #F8FAFC !important;
 }
 
 </style>
@@ -317,7 +316,8 @@ with tab1:
             xaxis_title="Branş",
             yaxis_title=f"{brans_metric} (₺)" if brans_metric == "Net Prim" else brans_metric,
             xaxis=dict(tickangle=-20),
-            margin=dict(l=20, r=20, t=60, b=20)
+            margin=dict(l=20, r=20, t=60, b=20),
+            font=dict(color="white") # BEYAZ EKRAN LEGEND FIX
         )
     else:
         fig_brans = px.pie(
@@ -339,11 +339,12 @@ with tab1:
             paper_bgcolor="rgba(0,0,0,0)",
             height=600,
             margin=dict(l=0, r=0, t=80, b=0),
+            font=dict(color="white"), # BEYAZ EKRAN LEGEND FIX
             legend=dict(
                 orientation="v",
                 y=0.5,
-                x=1.05
-
+                x=1.05,
+                font=dict(color="white") # SAĞ TARAF BEYAZ YAZI
             )
         )
 
@@ -385,7 +386,7 @@ with tab1:
             fig_gun = px.line(df_gunluk, x="Tanzim Tarihi", y="Poliçe No", markers=True, color_discrete_sequence=["#34a49a"])
             fig_gun.update_layout(yaxis_title="Poliçe Adet")
 
-        fig_gun.update_layout(template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=20, r=20, t=40, b=20))
+        fig_gun.update_layout(template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=20, r=20, t=40, b=20), font=dict(color="white"))
         st.plotly_chart(fig_gun, use_container_width=True)
 
     with col_g2:
@@ -399,7 +400,7 @@ with tab1:
             fig_ay.update_traces(texttemplate='%{text}', textposition='outside')
             fig_ay.update_layout(yaxis_title="Poliçe Adet")
 
-        fig_ay.update_layout(template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=20, r=20, t=50, b=20))
+        fig_ay.update_layout(template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=20, r=20, t=50, b=20), font=dict(color="white"))
         st.plotly_chart(fig_ay, use_container_width=True)
 
     st.divider()
@@ -556,7 +557,7 @@ with tab1:
                 height=450
             )
             fig.update_traces(textinfo="percent+label", textposition="inside")
-            fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=0, r=0, t=50, b=0))
+            fig.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=0, r=0, t=50, b=0), font=dict(color="white"), legend=dict(font=dict(color="white")))
             st.plotly_chart(fig, use_container_width=True)
 
     # --------------------------------------------------
@@ -652,8 +653,8 @@ with tab2:
     st.markdown("""
     <style>
     div.stButton > button {
-        background: linear-gradient(90deg, #38BDF8, #818CF8);
-        color: white;
+        background: linear-gradient(90deg, #38BDF8, #818CF8) !important;
+        color: white !important;
         border-radius: 10px;
         border: none;
         font-weight: 600;
