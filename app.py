@@ -8,12 +8,97 @@ import time
 # --------------------------------------------------
 st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 
+import streamlit as st
+import os
 
-# --------------------------------------------------
-# PREMIUM DARK CSS (Renk Paleti & KPI Düzenlemesi)
-# --------------------------------------------------
-# SADECE CSS BLOĞU DEĞİŞTİ — GERİ KALAN HER ŞEY AYNI
+def load_svg_maskot(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return None
 
+svg_icon = load_svg_maskot("maskot-onay-01.svg")
+
+if svg_icon:
+    st.markdown(f"""
+    <style>
+    /* 1. MASKOT KONUMU - SAYFA BAŞINDA SABİT */
+    .poli-wrapper {{
+        position: absolute; 
+        top: 20px; 
+        right: 40px;
+        width: 100px;
+        z-index: 99999;
+    }}
+
+    /* 2. SOL YANDA AÇILAN BALON */
+    .poli-bubble-side {{
+        position: absolute;
+        top: 30px; /* Kafasından biraz aşağı, gövde hizasına */
+        right: 115%; /* Karakterin soluna atar */
+        transform: scale(0); /* Başlangıçta gizli */
+        
+        background-color: #ffffff; 
+        color: #6a2473; 
+        
+        padding: 10px 18px;
+        border-radius: 18px 18px 0px 18px; /* Sol alt köşeyi keskin yaparak yön gösterir */
+        font-size: 15px; 
+        font-weight: 800;
+        
+        box-shadow: -10px 10px 25px rgba(0,0,0,0.2);
+        border: 2px solid #6a2473;
+        
+        white-space: nowrap;
+        opacity: 0;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        pointer-events: none;
+        z-index: 100000;
+    }}
+
+    /* Balonun yan kuyruğu (Karaktere doğru bakan küçük ok) */
+    .poli-bubble-side::after {{
+        content: '';
+        position: absolute;
+        right: -10px;
+        top: 50%;
+        transform: translateY(-50%);
+        border-width: 8px 0 8px 10px;
+        border-style: solid;
+        border-color: transparent transparent transparent #ffffff;
+    }}
+    
+    /* Kuyruk çerçevesi için dış katman */
+    .poli-bubble-side::before {{
+        content: '';
+        position: absolute;
+        right: -13px;
+        top: 50%;
+        transform: translateY(-50%);
+        border-width: 10px 0 10px 13px;
+        border-style: solid;
+        border-color: transparent transparent transparent #6a2473;
+        z-index: -1;
+    }}
+
+    /* 3. ETKİLEŞİM */
+    .poli-wrapper:hover .poli-bubble-side {{
+        opacity: 1;
+        transform: scale(1);
+        right: 120%; /* Biraz daha sola açılır */
+    }}
+
+    .poli-wrapper:hover {{
+        transform: scale(1.05);
+        cursor: pointer;
+    }}
+    </style>
+
+    <div class="poli-wrapper">
+        <div class="poli-bubble-side">Merhaba Ben Poli! 👋</div>
+        {svg_icon}
+    </div>
+    """, unsafe_allow_html=True)
 # --------------------------------------------------
 # PREMIUM ADAPTIVE CSS (Karanlık & Aydınlık Tema Uyumu)
 # --------------------------------------------------
@@ -108,7 +193,7 @@ div[data-testid="stDataEditor"] * {
 st.title("📊 Polipedia Analiz")
 
 # Sekmeler
-tab1, tab2 = st.tabs(["📊 Dashboard", "💰 Muhasebe"])
+tab1, tab2,= st.tabs(["📊 Dashboard", "💰 Muhasebe"])
 
 # --------------------------------------------------
 # VERİ KAYNAĞI
@@ -689,124 +774,194 @@ with tab1:
     else:
         st.info("Kriterlere uygun veri bulunamadı.")
 
-# --------------------------------------------------
-# MUHASEBE TAB
-# --------------------------------------------------
 with tab2:
     st.subheader("💰 Muhasebe ve Komisyon Düzenleme")
 
-    # 🔥 PREMIUM INFO BOX
+    import io
+    from datetime import datetime
+
+    # --- PREMIUM CSS (Tüm Butonlar ve Kartlar İçin) ---
     st.markdown("""
-    <div style="
-        backdrop-filter: blur(10px);
-        background: linear-gradient(145deg, rgba(15,23,42,0.7), rgba(30,41,59,0.6));
-        padding:12px 16px;
-        border-radius:12px;
-        border:1px solid rgba(255,255,255,0.08);
-        margin-bottom:10px;
-        color:#CBD5F5;
-    ">
-    💡 <b>Komisyon %</b> değiştir → Güncelle. Ödenen komisyonu manuel gir.
+    <style>
+    /* Genel Buton Tasarımı */
+    div.stButton > button {
+        width: 100%;
+        background: linear-gradient(90deg, #1E293B, #334155);
+        color: white;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.1);
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    /* Aksiyon Butonları Renk Geçişleri */
+    .st-emotion-cache-12w04pk.ef3ps4l4 { /* Primary buton için özel (Güncelle) */
+        background: linear-gradient(90deg, #38BDF8, #818CF8) !important;
+    }
+    div.stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        border-color: #38BDF8;
+    }
+    /* KPI Kart Tasarımı */
+    .metric-card {
+        background: rgba(30, 41, 59, 0.4);
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.05);
+        text-align: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 🔥 INFO BOX
+    st.markdown("""
+    <div style="background: rgba(56,189,248,0.1); padding:10px 15px; border-radius:10px; border-left:4px solid #38BDF8; margin-bottom:20px; color:#CBD5F5; font-size:14px;">
+    💡 <b>İpucu:</b> Komisyon oranını değiştirip "Hesaplamaları Güncelle" butonuna basarak farkları görebilirsiniz.
     </div>
     """, unsafe_allow_html=True)
 
+    # Session State Başlatma
     if 'df_muhasebe' not in st.session_state:
         df_init = df_acente_aylik[[
-            "Acente Adı", "Ay", "Acente Net Prim", 
+            "Acente Adı", "Ay", "Acente Net Prim",
             "Toplam Komisyon", "Komisyon %", "Acente Komisyon Kazancı"
         ]].copy()
-        
         df_init.rename(columns={"Acente Komisyon Kazancı": "Acente Toplam Kazanç"}, inplace=True)
         df_init["İlk Kazanç"] = df_init["Acente Toplam Kazanç"].fillna(0)
         df_init["İlk Komisyon %"] = df_init["Komisyon %"]
         df_init["Güncel Komisyon Farkı"] = 0.0
         df_init["Acenteye Ödenen Komisyon"] = 0.0
         df_init["Kalan Komisyon Tutarı"] = 0.0
+        df_init["_row_id"] = range(len(df_init))
         st.session_state.df_muhasebe = df_init
 
+    if "muhasebe_versions" not in st.session_state:
+        st.session_state.muhasebe_versions = []
+
+    # Yardımcı Fonksiyonlar
+    def _to_excel_bytes(df_export):
+        output = io.BytesIO()
+        export_df = df_export.drop(columns=["_row_id"], errors="ignore").copy()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            export_df.to_excel(writer, index=False, sheet_name="Muhasebe")
+        return output.getvalue()
+
+    # --------------------------------------------------
+    # KOMPAKT FİLTRELEME ALANI
+    # --------------------------------------------------
+    with st.expander("🔍 Filtreleme Seçenekleri", expanded=False):
+        f_col1, f_col2, f_col3 = st.columns([2, 2, 1])
+        
+        with f_col1:
+            acente_listesi = sorted(st.session_state.df_muhasebe["Acente Adı"].dropna().unique().tolist())
+            secili_acenteler = st.multiselect("Acente Seç", options=acente_listesi, key="m_f_acente")
+            
+        with f_col2:
+            ay_listesi = sorted(st.session_state.df_muhasebe["Ay"].dropna().unique().tolist())
+            secili_aylar = st.multiselect("Ay Seç", options=ay_listesi, key="m_f_ay")
+            
+        with f_col3:
+            st.write("") # Boşluk
+            st.write("") # Boşluk
+            if st.button("🧹 Filtreleri Temizle"):
+                st.session_state.m_f_acente = []
+                st.session_state.m_f_ay = []
+                st.rerun()
+
+    # Filtreleme Uygulama
+    df_filtered = st.session_state.df_muhasebe.copy()
+    if secili_acenteler:
+        df_filtered = df_filtered[df_filtered["Acente Adı"].isin(secili_acenteler)]
+    if secili_aylar:
+        df_filtered = df_filtered[df_filtered["Ay"].isin(secili_aylar)]
+
+    # --------------------------------------------------
+    # VERİ EDİTÖRÜ
+    # --------------------------------------------------
     edited_df = st.data_editor(
-        st.session_state.df_muhasebe,
-        height=500,
+        df_filtered,
+        height=400,
         column_config={
             "Acente Adı": st.column_config.TextColumn("Acente", disabled=True),
             "Ay": st.column_config.TextColumn("Ay", disabled=True),
             "Acente Net Prim": st.column_config.NumberColumn("Net Prim", format="₺%,.0f", disabled=True),
             "Toplam Komisyon": st.column_config.NumberColumn("Toplam Komisyon", format="₺%,.0f", disabled=True),
             "Komisyon %": st.column_config.NumberColumn("Komisyon %", min_value=0, max_value=100, format="%d%%"),
-            "Acente Toplam Kazanç": st.column_config.NumberColumn("Acente Toplam Kazanç", format="₺%,.2f", disabled=True),
-            "Acenteye Ödenen Komisyon": st.column_config.NumberColumn("Acenteye Ödenen Komisyon", format="₺%,.2f"),
-            "Güncel Komisyon Farkı": st.column_config.NumberColumn("Komisyon Farkı (puan)", format="%d", disabled=True),
-            "Kalan Komisyon Tutarı": st.column_config.NumberColumn("Kalan Komisyon Tutarı", format="₺%,.2f", disabled=True),
-            "İlk Kazanç": None,
-            "İlk Komisyon %": None,
+            "Acente Toplam Kazanç": st.column_config.NumberColumn("Toplam Kazanç", format="₺%,.2f", disabled=True),
+            "Acenteye Ödenen Komisyon": st.column_config.NumberColumn("Ödenen", format="₺%,.2f"),
+            "Güncel Komisyon Farkı": st.column_config.NumberColumn("Fark (Puan)", format="%d", disabled=True),
+            "Kalan Komisyon Tutarı": st.column_config.NumberColumn("Kalan", format="₺%,.2f", disabled=True),
+            "İlk Kazanç": None, "İlk Komisyon %": None, "_row_id": None,
         },
         hide_index=True,
         use_container_width=True,
-        key="muhasebe_editor_v5"
+        key="muhasebe_editor_v6"
     )
 
-    col_btn1, col_btn2 = st.columns([1, 4])
+    # Butonlar İçin Sütunlar
+    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
 
-    # 🔥 PREMIUM BUTON CSS
-    st.markdown("""
-    <style>
-    div.stButton > button {
-        background: linear-gradient(90deg, #38BDF8, #818CF8);
-        color: white;
-        border-radius: 10px;
-        border: none;
-        font-weight: 600;
-        transition: 0.3s;
-    }
-    div.stButton > button:hover {
-        transform: scale(1.05);
-        box-shadow: 0 6px 20px rgba(56,189,248,0.4);
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    with col_btn1:
+    with b_col1:
         if st.button("🚀 Hesaplamaları Güncelle", type="primary"):
+            # Hesaplama mantığı
             edited_df["Acente Toplam Kazanç"] = (edited_df["Toplam Komisyon"] * edited_df["Komisyon %"]) / 100
             edited_df["Güncel Komisyon Farkı"] = edited_df["Komisyon %"] - edited_df["İlk Komisyon %"]
             edited_df["Kalan Komisyon Tutarı"] = edited_df["Acente Toplam Kazanç"] - edited_df["Acenteye Ödenen Komisyon"].fillna(0)
-            st.session_state.df_muhasebe = edited_df
+            
+            # Ana session state'i güncelle
+            df_full = st.session_state.df_muhasebe.copy().set_index("_row_id")
+            df_edit = edited_df.set_index("_row_id")
+            df_full.update(df_edit)
+            st.session_state.df_muhasebe = df_full.reset_index()
             st.rerun()
 
-    with col_btn2:
-        if st.button("🔄 Verileri Sıfırla"):
-            if 'df_muhasebe' in st.session_state:
-                del st.session_state.df_muhasebe
-                st.rerun()
+    with b_col2:
+        if st.button("💾 Versiyon Kaydet"):
+            mevcut_df = st.session_state.df_muhasebe.copy()
+            versiyon_no = len(st.session_state.muhasebe_versions) + 1
+            st.session_state.muhasebe_versions.append({
+                "version_name": f"Versiyon {versiyon_no}",
+                "timestamp": datetime.now().strftime("%H:%M:%S"),
+                "df": mevcut_df
+            })
+            st.session_state.muhasebe_versions = st.session_state.muhasebe_versions[-5:]
+            st.toast("Versiyon kaydedildi!", icon="✅")
 
-    st.divider()
+    with b_col3:
+        # İndirme butonu stilini uydurmak için placeholder veya doğrudan st.download_button
+        excel_data_main = _to_excel_bytes(st.session_state.df_muhasebe)
+        st.download_button("📥 Excel Olarak Al", data=excel_data_main, file_name="muhasebe_listesi.xlsx")
 
-    # 🔥 PREMIUM KPI CARDS
-    t1, t2, t3 = st.columns(3)
+    with b_col4:
+        if st.button("🔄 Tüm Verileri Sıfırla"):
+            del st.session_state.df_muhasebe
+            if 'muhasebe_versions' in st.session_state: del st.session_state.muhasebe_versions
+            st.rerun()
 
-    toplam_kazanc = st.session_state.df_muhasebe["Acente Toplam Kazanç"].sum()
-    toplam_kalan = st.session_state.df_muhasebe["Kalan Komisyon Tutarı"].sum()
+    st.write("---")
 
-    t1.markdown(f"""
-    <div class="metric-card">
-        <div style="font-size:13px; color:#94A3B8;">Acente Toplam Kazanç</div>
-        <div style="font-size:28px; font-weight:800;
-            background: linear-gradient(90deg,#38BDF8,#818CF8);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;">
-            ₺{toplam_kazanc:,.2f}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # --------------------------------------------------
+    # KPI KARTLARI
+    # --------------------------------------------------
+    kpi1, kpi2, kpi3 = st.columns(3)
+    
+    total_kazanc = st.session_state.df_muhasebe["Acente Toplam Kazanç"].sum()
+    total_odenen = st.session_state.df_muhasebe["Acenteye Ödenen Komisyon"].sum()
+    total_kalan = st.session_state.df_muhasebe["Kalan Komisyon Tutarı"].sum()
 
-    t3.markdown(f"""
-    <div class="metric-card">
-        <div style="font-size:13px; color:#94A3B8;">Kalan Komisyon</div>
-        <div style="font-size:28px; font-weight:800;
-            background: linear-gradient(90deg,#22C55E,#4ADE80);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;">
-            ₺{toplam_kalan:,.2f}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    kpi1.markdown(f"<div class='metric-card'><span style='color:#94A3B8; font-size:12px;'>TOPLAM HAKEDİŞ</span><br><span style='color:#38BDF8; font-size:22px; font-weight:bold;'>₺{total_kazanc:,.2f}</span></div>", unsafe_allow_html=True)
+    kpi2.markdown(f"<div class='metric-card'><span style='color:#94A3B8; font-size:12px;'>TOPLAM ÖDENEN</span><br><span style='color:#E2E8F0; font-size:22px; font-weight:bold;'>₺{total_odenen:,.2f}</span></div>", unsafe_allow_html=True)
+    kpi3.markdown(f"<div class='metric-card'><span style='color:#94A3B8; font-size:12px;'>KALAN BAKİYE</span><br><span style='color:#22C55E; font-size:22px; font-weight:bold;'>₺{total_kalan:,.2f}</span></div>", unsafe_allow_html=True)
+
+    # --------------------------------------------------
+    # VERSİYON GEÇMİŞİ (YATAY KARTLAR)
+    # --------------------------------------------------
+    if st.session_state.muhasebe_versions:
+        st.write("")
+        st.markdown("### 📄 Son Kayıtlar")
+        for v in reversed(st.session_state.muhasebe_versions):
+            col_v1, col_v2 = st.columns([4, 1])
+            col_v1.info(f"**{v['version_name']}** - Saat: {v['timestamp']}")
+            with col_v2:
+                st.download_button("İndir", _to_excel_bytes(v["df"]), file_name=f"{v['version_name']}.xlsx", key=f"dl_{v['version_name']}")
