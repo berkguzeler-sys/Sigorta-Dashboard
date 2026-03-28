@@ -662,18 +662,7 @@ with tab1:
         st.info("Uygun veri bulunamadı")
 
     st.divider()
-
-    st.subheader("⚠️ Son 1 Aydır Hiç Üretim Yapmamış Acenteler")
-    max_tarih = df["Tanzim Tarihi"].max()
-    son_1_ay = max_tarih - pd.Timedelta(days=30)
-    aktif_acente = df[df["Tanzim Tarihi"] >= son_1_ay]["Acente Adı"].dropna().unique()
-    tum_acente = df["Acente Adı"].dropna().unique()
-    pasif_acente = sorted(set(tum_acente) - set(aktif_acente))
-
-    if len(pasif_acente) > 0:
-        st.dataframe(pd.DataFrame(pasif_acente, columns=["Acente Adı"]), use_container_width=True)
-    else:
-        st.success("Tüm acenteler son 1 ayda üretim yapmış 🎯")
+ 
 
 
     # --------------------------------------------------
@@ -773,6 +762,64 @@ with tab1:
             st.plotly_chart(fig_s, use_container_width=True, config={'displayModeBar': False})
     else:
         st.info("Kriterlere uygun veri bulunamadı.")
+
+
+    # --------------------------------------------------
+# 🏆 TOP 5 + PASİF ACENTE ANALİZİ (YAN YANA)
+# --------------------------------------------------
+    st.subheader("🏆 Acente Performans Özeti")
+
+    col_perf1, col_perf2 = st.columns(2)
+
+    with col_perf1:
+        st.markdown("### 🚀 En Çok Üreten 5 Acente")
+
+        df_top5 = df_filtre[
+            df_filtre["Acente Adı"].fillna("").str.upper() != "POLIPEDIA"
+        ].groupby("Acente Adı").agg({
+            "Net Prim": "sum",
+            "Poliçe No": "count"
+        }).reset_index()
+
+        df_top5 = df_top5.sort_values(by="Net Prim", ascending=False).head(5)
+
+        if not df_top5.empty:
+            df_top5_display = df_top5.copy()
+            df_top5_display.rename(columns={"Poliçe No": "Poliçe Adet"}, inplace=True)
+            df_top5_display["Net Prim"] = df_top5_display["Net Prim"].apply(lambda x: f"₺{x:,.0f}")
+
+            st.dataframe(
+                df_top5_display[["Acente Adı", "Net Prim", "Poliçe Adet"]],
+                use_container_width=True,
+                height=315
+            )
+        else:
+            st.info("Top 5 acente verisi bulunamadı.")
+
+    with col_perf2:
+        st.markdown("### ⚠️ Son 1 Aydır Üretim Yapmayan Acenteler")
+
+        max_tarih = df["Tanzim Tarihi"].max()
+        son_1_ay = max_tarih - pd.Timedelta(days=30)
+
+        aktif_acente = df[
+            (df["Tanzim Tarihi"] >= son_1_ay) &
+            (df["Acente Adı"].fillna("").str.upper() != "POLIPEDIA")
+        ]["Acente Adı"].dropna().unique()
+
+        tum_acente = df[
+            df["Acente Adı"].fillna("").str.upper() != "POLIPEDIA"
+        ]["Acente Adı"].dropna().unique()
+
+        pasif_acente = sorted(set(tum_acente) - set(aktif_acente))
+
+        if pasif_acente:
+            df_pasif = pd.DataFrame(pasif_acente, columns=["Acente Adı"])
+            st.dataframe(df_pasif, use_container_width=True, height=315)
+        else:
+            st.success("Tüm acenteler son 1 ayda üretim yapmış 🎯")
+
+    st.divider()    
 
 with tab2:
     st.subheader("💰 Muhasebe ve Komisyon Düzenleme")
