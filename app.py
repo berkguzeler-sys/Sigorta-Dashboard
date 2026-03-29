@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import time
+import numpy as np
 
 # --------------------------------------------------
 # SAYFA AYARI
@@ -207,49 +208,274 @@ uploaded_file = st.sidebar.file_uploader("Excel yükle", type=["xlsx"])
 
 @st.cache_data(ttl=60)
 def load_data(source):
-    data = pd.read_excel(source)
-    # Kolon isimlerini temizle ve istenen değişiklikleri yap
-    data.columns = data.columns.str.strip()
+    return pd.read_excel(source)
+
+def run_etl(data):
+    df = data.copy()
+
+    # --------------------------------------------------
+    # KOLON İSİMLERİNİ TEMİZLE
+    # --------------------------------------------------
+    df.columns = df.columns.str.strip()
+
+    # Son satır toplam satırıysa kaldır
+    if len(df) > 0:
+        df = df.iloc[:-1].copy()
+
+    # --------------------------------------------------
+    # POLİÇE TÜRÜ KOD TEMİZLİĞİ
+    # --------------------------------------------------
+    if "Poliçe Türü Kod" in df.columns:
+        df["Poliçe Türü Kod"] = (
+            df["Poliçe Türü Kod"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        df.loc[df["Poliçe Türü Kod"].isin(["145", "YI1", "EEİ"]), "Poliçe Türü"] = "YANGIN"
+        df.loc[df["Poliçe Türü Kod"] == "611", "Poliçe Türü"] = "SAĞLIK"
+        df.loc[df["Poliçe Türü Kod"] == "524", "Poliçe Türü"] = "SEYAHAT SAĞLIK"
+
+    if "Poliçe Türü" in df.columns:
+        df["Poliçe Türü"] = df["Poliçe Türü"].fillna("DİĞER")
+    else:
+        df["Poliçe Türü"] = "DİĞER"
+
+    # --------------------------------------------------
+    # ŞİRKET DÜZELTME
+    # --------------------------------------------------
+    if "Sigorta Şirketi" in df.columns:
+        df["Sigorta Şirketi"] = df["Sigorta Şirketi"].replace(
+            "TÜRKİYE PUSULA", "TÜRKİYE SİGORTA"
+        )
+
+    # --------------------------------------------------
+    # GEREKSİZ KOLONLARI SİL
+    # --------------------------------------------------
+    silinecek_kolonlar = [
+        'İskonto',
+        'Kayıt Şekli',
+        'Sms Gönderme',
+        'Mütabakat',
+        'Açıklama',
+        'Kalan Borç',
+        'T.C. / VKn',
+        'Referans Kişi',
+        'Teklif Durumu',
+        'Şube',
+        'Belge Seri/Diğer',
+        'Alınan Ödeme Tipi',
+        'Eski Plaka',
+        'Aracıyım',
+        'Şirkete Ödeme Tipi',
+        'Diğer Acente Adı',
+        'Diğer A.Komisyon Tutarı'
+    ]
+    df = df.drop(columns=silinecek_kolonlar, errors="ignore")
+
+    # --------------------------------------------------
+    # DIŞ ACENTE ADI TEMİZLİĞİ
+    # --------------------------------------------------
+    if "Dış Acente Adı" in df.columns:
+        df["Dış Acente Adı"] = (
+            df["Dış Acente Adı"]
+            .replace(['-', ' - ', None, ''], 'POLIPEDIA')
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+    else:
+        df["Dış Acente Adı"] = "POLIPEDIA"
+
+    # --------------------------------------------------
+    # TARİH VE AY
+    # --------------------------------------------------
+    if "Tanzim Tarihi" in df.columns:
+        df["Tanzim Tarihi"] = pd.to_datetime(df["Tanzim Tarihi"], errors="coerce")
+        df = df[df["Tanzim Tarihi"].notna()].copy()
+        df["Ay"] = df["Tanzim Tarihi"].dt.to_period("M").astype(str)
+    else:
+        df["Tanzim Tarihi"] = pd.NaT
+        df["Ay"] = ""
+
+    # --------------------------------------------------
+    # SAYISAL KOLONLAR
+    # --------------------------------------------------
+    for col in ["Net Prim", "Asıl Komisyon"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        else:
+            df[col] = 0
+
+    # --------------------------------------------------
+    # KOMİSYON HESAPLARI
+    # --------------------------------------------------
+    if {"Dış Acente Adı", "Ay", "Net Prim"}.issubset(df.columns):
+        toplam_net_prim = df.groupby(["Dış Acente Adı", "Ay"])["Net Prim"].transform("sum")
+
+        kosullar = [
+            (toplam_net_prim <= 250000),
+            (toplam_net_prim <= 500000),
+            (toplam_net_prim > 500000)
+        ]
+        oranlar = [0.55, 0.60, 0.65]
+
+        df["Komisyon Oranı"] = np.select(kosullar, oranlar, default=0)
+        df.loc[df["Dış Acente Adı"] == "POLIPEDIA", "Komisyon Oranı"] = 1.0
+        df["Komisyon Oranı (%)"] = (df["Komisyon Oranı"] * 100).round(2)
+    else:
+        df["Komisyon Oranı"] = 0
+        df["Komisyon Oranı (%)"] = 0
+
+    df["Acente Komisyon Kazancı"] = np.where(
+        df["Dış Acente Adı"] != "POLIPEDIA",
+        df["Komisyon Oranı"] * df["Asıl Komisyon"],
+        0
+    )
+
+    df["Polipedia Komisyon Kazancı"] = np.where(
+        df["Dış Acente Adı"] == "POLIPEDIA",
+        df["Asıl Komisyon"],
+        0
+    )
+
+    df["Acente Mi?"] = np.where(
+        df["Dış Acente Adı"] != "POLIPEDIA",
+        1,
+        0
+    )
+
+    df["Polipedia Net Prim"] = np.where(
+        df["Dış Acente Adı"] == "POLIPEDIA",
+        df["Net Prim"],
+        0
+    )
+
+    df["Acente Net Prim"] = np.where(
+        df["Dış Acente Adı"] != "POLIPEDIA",
+        df["Net Prim"],
+        0
+    )
+
+    df["Acenteden Gelen Komisyon"] = np.where(
+        pd.to_numeric(df["Acente Komisyon Kazancı"], errors="coerce").fillna(0) != 0,
+        pd.to_numeric(df["Asıl Komisyon"], errors="coerce").fillna(0)
+        - pd.to_numeric(df["Acente Komisyon Kazancı"], errors="coerce").fillna(0),
+        0
+    )
+
+    # --------------------------------------------------
+    # APP.PY'NİN KULLANDIĞI İSİMLERE ÇEVİR
+    # --------------------------------------------------
     rename_map = {
         "Asıl Komisyon": "Toplam Komisyon",
         "Dış Acente Adı": "Acente Adı",
         "Poliçe Türü": "Branş"
     }
-    data.rename(columns=rename_map, inplace=True)
-    return data
+    df.rename(columns=rename_map, inplace=True)
+
+    # --------------------------------------------------
+    # YARDIMCI KOLONLAR
+    # --------------------------------------------------
+    # --------------------------------------------------
+    # UNIQUE ADET HESAPLARI (TEKİL POLİÇE BAZLI)
+    # --------------------------------------------------
+
+    # Poliçe No string olsun (çok önemli)
+    df["Poliçe No"] = df["Poliçe No"].astype(str)
+
+    # Tekil poliçe flag (duplicate varsa sadece ilkini alır)
+    df["tekil_flag"] = ~df["Poliçe No"].duplicated()
+
+    # -------------------------
+    # POLİÇE ADET
+    # -------------------------
+    df["Poliçe Adet"] = df["tekil_flag"].astype(int)
+
+    # -------------------------
+    # ACENTE ADET (UNIQUE)
+    # -------------------------
+    df["Acente Adet"] = np.where(
+        (df["Acente Mi?"] == 1) & (df["tekil_flag"]),
+        1,
+        0
+    )
+
+    # -------------------------
+    # POLIPEDIA ADET (UNIQUE)
+    # -------------------------
+    df["Polipedia Adet"] = np.where(
+        (df["Acente Mi?"] == 0) & (df["tekil_flag"]),
+        1,
+        0
+    )
+    # --------------------------------------------------
+    # İPTAL ANALİZİ (UNIQUE POLİÇE BAZLI)
+    # --------------------------------------------------
+
+    # Kayıt Türü güvenli hale getir
+    df["Kayıt Türü"] = df["Kayıt Türü"].astype(str).str.strip()
+
+    # İptal flag
+    df["İptal Flag"] = np.where(
+        df["Kayıt Türü"] == "İptal Zeyl-",
+        1,
+        0
+    )
+
+    # Tekil poliçe bazında iptal var mı?
+    iptal_df = df.groupby("Poliçe No")["İptal Flag"].max().reset_index()
+
+    iptal_df.rename(columns={"İptal Flag": "İptal Edildi"}, inplace=True)
+
+    # Ana df ile birleştir
+    df = df.merge(iptal_df, on="Poliçe No", how="left")
+
+    # Tekil poliçelerde iptal say
+    df["İptal Poliçe Adet"] = np.where(
+        (df["İptal Edildi"] == 1) & (df["tekil_flag"]),
+        1,
+        0
+    )
+       
+
+    # --------------------------------------------------
+    # EKSİK KOLON GÜVENLİĞİ
+    # --------------------------------------------------
+    gerekli_kolonlar = [
+        "Net Prim", "Poliçe No", "Acente Adı", "Branş",
+        "Acente Net Prim", "Toplam Komisyon",
+        "Acente Komisyon Kazancı", "Polipedia Komisyon Kazancı",
+        "Acenteden Gelen Komisyon"
+    ]
+
+    for col in gerekli_kolonlar:
+        if col not in df.columns:
+            if col in [
+                "Net Prim", "Acente Net Prim", "Toplam Komisyon",
+                "Acente Komisyon Kazancı", "Polipedia Komisyon Kazancı",
+                "Acenteden Gelen Komisyon"
+            ]:
+                df[col] = 0
+            else:
+                df[col] = ""
+
+    return df
 
 try:
     if uploaded_file is not None:
-        df = load_data(uploaded_file)
+        df_raw = load_data(uploaded_file)
     else:
-        df = load_data(excel_url)
+        df_raw = load_data(excel_url)
+
+    df = run_etl(df_raw)
+
 except Exception as e:
     st.error("❌ Veri yüklenemedi!")
     st.write(e)
     st.stop()
 
-# --------------------------------------------------
-# TEMİZLEME VE HAZIRLIK
-# --------------------------------------------------
-df["Tanzim Tarihi"] = pd.to_datetime(df["Tanzim Tarihi"], errors="coerce")
-df = df[df["Tanzim Tarihi"].notna()].copy()
-df["Ay"] = df["Tanzim Tarihi"].dt.to_period("M").astype(str)
-
-# Yardımcı kolonlar
-if "Acente Mi?" in df.columns:
-    df["Acente Adet"] = (df["Acente Mi?"] == 1).astype(int)
-    df["Polipedia Adet"] = (df["Acente Mi?"] == 0).astype(int)
-else:
-    df["Acente Adet"] = 0
-    df["Polipedia Adet"] = 0
-
-# Eksikse güvenli kolon üret
-for col in ["Net Prim", "Poliçe No", "Acente Adı", "Branş", "Acente Net Prim", "Toplam Komisyon", "Acente Komisyon Kazancı", "Polipedia Komisyon Kazancı"]:
-    if col not in df.columns:
-        if col in ["Net Prim", "Acente Net Prim", "Toplam Komisyon", "Acente Komisyon Kazancı", "Polipedia Komisyon Kazancı"]:
-            df[col] = 0
-        else:
-            df[col] = ""
 
 # --------------------------------------------------
 # SIDEBAR FİLTRELER
@@ -488,6 +714,88 @@ with tab1:
         st.plotly_chart(fig_ay, use_container_width=True)
 
     st.divider()
+
+    # --------------------------------------------------
+    # 🚨 İPTAL ORANI ANALİZİ
+    # --------------------------------------------------
+    st.subheader("🚨 İptal Oranı Analizi")
+
+    if not df_filtre.empty:
+
+        # Unique poliçe bazlı
+        df_iptal = df_filtre[df_filtre["tekil_flag"] == True].copy()
+
+        toplam_poliçe = df_iptal["Poliçe Adet"].sum()
+        iptal_poliçe = df_iptal["İptal Poliçe Adet"].sum()
+
+        iptal_orani = (iptal_poliçe / toplam_poliçe) if toplam_poliçe != 0 else 0
+
+        # KPI
+        col_i1, col_i2, col_i3 = st.columns(3)
+
+        col_i1.markdown(kpi("Toplam Poliçe", f"{int(toplam_poliçe):,}"), unsafe_allow_html=True)
+        col_i2.markdown(kpi("İptal Poliçe", f"{int(iptal_poliçe):,}"), unsafe_allow_html=True)
+        col_i3.markdown(kpi("İptal Oranı", f"%{iptal_orani*100:.2f}"), unsafe_allow_html=True)
+
+        
+
+        df_acente_iptal = df_iptal.groupby("Acente Adı").agg({
+            "Poliçe Adet": "sum",
+            "İptal Poliçe Adet": "sum"
+        }).reset_index()
+
+        df_acente_iptal["İptal Oranı"] = np.where(
+            df_acente_iptal["Poliçe Adet"] != 0,
+            df_acente_iptal["İptal Poliçe Adet"] / df_acente_iptal["Poliçe Adet"],
+            0
+        )
+
+        df_acente_iptal = df_acente_iptal.sort_values("İptal Oranı", ascending=False)
+
+        # 🔥 PREMIUM GRAFİK
+        df_plot = df_acente_iptal.copy()
+
+        df_plot = df_plot.sort_values("İptal Oranı", ascending=False).head(10)
+        df_plot["İptal %"] = df_plot["İptal Oranı"] * 100
+
+        fig_iptal = px.bar(
+            df_plot,
+            x="İptal %",
+            y="Acente Adı",
+            orientation="h",
+            text=df_plot["İptal %"].map(lambda x: f"%{x:.1f}"),
+            color="İptal %",
+            color_continuous_scale=["#34a49a", "#f5a150", "#e9617b"]
+        )
+
+        fig_iptal.update_traces(
+            textposition="outside",
+            marker_line_width=0,
+            hovertemplate="<b>%{y}</b><br>İptal Oranı: %{x:.2f}%<extra></extra>"
+        )
+
+        fig_iptal.update_layout(
+            template="plotly_dark",
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            xaxis_title="İptal Oranı (%)",
+            yaxis_title="",
+            yaxis=dict(categoryorder="total ascending", tickfont=dict(size=13)),
+            xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)"),
+            margin=dict(l=20, r=40, t=30, b=20),
+            height=450,
+            coloraxis_showscale=False
+        )
+
+        st.markdown("### 📋 Detay Tablo")
+
+        df_display = df_acente_iptal.copy()
+        df_display["İptal Oranı"] = df_display["İptal Oranı"].map(lambda x: f"%{x*100:.2f}")
+
+        st.dataframe(df_display, use_container_width=True)
+
+    else:
+        st.warning("Veri bulunamadı")
 
     # --------------------------------------------------
     # ACENTE ANALİZ
