@@ -3,8 +3,10 @@ import pandas as pd
 import plotly.express as px
 import time
 import numpy as np
+import io  
 from db import delete_anlasma_log
 from db import get_user
+from db import upsert_muhasebe
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -13,7 +15,8 @@ from db import (
     load_komisyon_anlasmalari,
     upsert_komisyon_anlasmalari,
     load_muhasebe,
-    save_muhasebe
+    upsert_muhasebe,
+    save_processed_data
 )
 
 from db import save_anlasma_log, load_anlasma_log
@@ -413,9 +416,6 @@ def run_etl(data):
     df.rename(columns=rename_map, inplace=True)
 
     # --------------------------------------------------
-    # YARDIMCI KOLONLAR
-    # --------------------------------------------------
-    # --------------------------------------------------
     # UNIQUE ADET HESAPLARI (TEKİL POLİÇE BAZLI)
     # --------------------------------------------------
 
@@ -500,17 +500,65 @@ def run_etl(data):
 
     return df
 
+# 🔥 AKILLI VERİ AKIŞI (BRONZ -> GÜMÜŞ -> ALTIN)
+# --------------------------------------------------
 try:
     if uploaded_file is not None:
-        df_raw = load_data(uploaded_file)
+        # A. EXCEL'DEN OKU
+        df_incoming = load_data(uploaded_file)
+        
+        # B. BRONZ KATMAN: Sadece yeni satırları DB'ye ekle (Mükerrer kontrolü yapar)
+        from db import save_raw_data_to_db, save_processed_data, upsert_muhasebe_from_dashboard
+        eklenen_sayisi = save_raw_data_to_db(df_incoming)
+        
+        # C. TOPLAM VERİYİ ÇEK: DB'deki tüm birikmiş ham veriyi al
+        from db import get_engine
+        df_total_raw = pd.read_sql("SELECT * FROM ham_veriler", get_engine())
+        
+        # D. İŞLEME (GÜMÜŞ): run_etl ile hesaplamaları yap (Branş, Kazanç, İptal vb.)
+        df = run_etl(df_total_raw)
+        
+        # E. GÜMÜŞ KAYIT: Hesaplanmış haliyle 'islenmis_veriler' tablosuna yaz
+        save_processed_data(df)
+        
+        # F. ALTIN KATMAN: Muhasebe özetini güncelle (Manuel oranları korur)
+        if not df.empty:
+            df_muhasebe_sync = df.groupby(["Acente Adı", "Ay"]).agg({
+                "Net Prim": "sum",
+                "Toplam Komisyon": "sum",
+                "Komisyon Oranı (%)": "first",
+                "Acente Komisyon Kazancı": "sum"
+            }).reset_index()
+
+            df_muhasebe_sync.rename(columns={
+                "Acente Adı": "acente_adi",
+                "Ay": "ay",
+                "Net Prim": "net_prim",
+                "Toplam Komisyon": "toplam_komisyon",
+                "Komisyon Oranı (%)": "komisyon_orani",
+                "Acente Komisyon Kazancı": "toplam_kazanc"
+            }, inplace=True)
+
+            upsert_muhasebe_from_dashboard(df_muhasebe_sync, st.session_state.user)
+            
+            if eklenen_sayisi > 0:
+                st.sidebar.success(f"✅ {eklenen_sayisi} yeni kayıt eklendi!")
+            else:
+                st.sidebar.info("ℹ️ Excel'deki kayıtlar zaten mevcut.")
     else:
-        df_raw = load_data(excel_url)
-
-    df = run_etl(df_raw)
-
+        # Excel yoksa Dashboard'u İŞLENMİŞ veriden besle (Hızlı Açılış)
+        from db import load_processed_data
+        df = load_processed_data()
+        
+        if df.empty:
+            # DB bomboşsa (ilk çalıştırma) varsayılan URL'den çek
+            df_raw = load_data(excel_url)
+            df = run_etl(df_raw)
+            # İlk kurulumda tabloları oluşturması için:
+            save_processed_data(df)
+            
 except Exception as e:
-    st.error("❌ Veri yüklenemedi!")
-    st.write(e)
+    st.error(f"❌ Veri akış hatası: {e}")
     st.stop()
 
 
@@ -1168,9 +1216,38 @@ with tab1:
 
 with tab2:
     st.subheader("💰 Muhasebe ve Komisyon Düzenleme")
+    
+    # 1. DB'den veriyi çek
+    from db import load_muhasebe
+    df_db = load_muhasebe()
 
-    import io
-    from datetime import datetime
+    # 2. Eğer session_state boşsa veya veriyi yenilemek gerekiyorsa
+    if 'df_muhasebe' not in st.session_state:
+        if not df_db.empty:
+            df_init = df_db.copy()
+            # DB kolonlarını UI isimlerine çevir
+            df_init.rename(columns={
+                "acente_adi": "Acente Adı",
+                "ay": "Ay",
+                "net_prim": "Acente Net Prim",
+                "toplam_komisyon": "Toplam Komisyon",
+                "komisyon_orani": "Komisyon %",
+                "toplam_kazanc": "Acente Toplam Kazanç",
+                "odenen_komisyon": "Acenteye Ödenen Komisyon",
+                "kalan_komisyon": "Kalan Komisyon Tutarı"
+            }, inplace=True)
+            
+            # --- HATAYI ÇÖZEN KRİTİK KISIM ---
+            # Hesaplamalar için eksik olan yardımcı sütunları ekliyoruz
+            df_init["İlk Komisyon %"] = df_init["Komisyon %"]
+            df_init["İlk Kazanç"] = df_init["Acente Toplam Kazanç"]
+            df_init["Güncel Komisyon Farkı"] = 0.0
+            df_init["_row_id"] = range(len(df_init))
+            
+            st.session_state.df_muhasebe = df_init
+        else:
+            st.warning("Henüz veritabanında muhasebe kaydı yok. Lütfen dashboard verisini yükleyin.")
+            st.stop()
 
     # --- PREMIUM CSS (Tüm Butonlar ve Kartlar İçin) ---
     st.markdown("""
@@ -1242,6 +1319,12 @@ with tab2:
     # --------------------------------------------------
     # KOMPAKT FİLTRELEME ALANI
     # --------------------------------------------------
+    # KOMPAKT FİLTRELEME ALANI (DOĞRU VE TEK HALİ)
+    # --------------------------------------------------
+    def reset_accounting_filters():
+        st.session_state.m_f_acente = []
+        st.session_state.m_f_ay = []
+
     with st.expander("🔍 Filtreleme Seçenekleri", expanded=False):
         f_col1, f_col2, f_col3 = st.columns([2, 2, 1])
         
@@ -1254,12 +1337,10 @@ with tab2:
             secili_aylar = st.multiselect("Ay Seç", options=ay_listesi, key="m_f_ay")
             
         with f_col3:
-            st.write("") # Boşluk
-            st.write("") # Boşluk
-            if st.button("🧹 Filtreleri Temizle"):
-                st.session_state.m_f_acente = []
-                st.session_state.m_f_ay = []
-                st.rerun()
+            st.write("") 
+            st.write("") 
+            # BURADA SADECE BU TEK SATIR KALSIN, DİĞER BUTONLARI SİL
+            st.button("🧹 Filtreleri Temizle", on_click=reset_accounting_filters, key="btn_muhasebe_temizle")
 
     # Filtreleme Uygulama
     df_filtered = st.session_state.df_muhasebe.copy()
@@ -1292,7 +1373,7 @@ with tab2:
     )
 
     # Butonlar İçin Sütunlar
-    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+    b_col1, b_col3, b_col4, b_col5 = st.columns(4)
 
     with b_col1:
         if st.button("🚀 Hesaplamaları Güncelle", type="primary"):
@@ -1308,17 +1389,7 @@ with tab2:
             st.session_state.df_muhasebe = df_full.reset_index()
             st.rerun()
 
-    with b_col2:
-        if st.button("💾 Versiyon Kaydet"):
-            mevcut_df = st.session_state.df_muhasebe.copy()
-            versiyon_no = len(st.session_state.muhasebe_versions) + 1
-            st.session_state.muhasebe_versions.append({
-                "version_name": f"Versiyon {versiyon_no}",
-                "timestamp": datetime.now().strftime("%H:%M:%S"),
-                "df": mevcut_df
-            })
-            st.session_state.muhasebe_versions = st.session_state.muhasebe_versions[-5:]
-            st.toast("Versiyon kaydedildi!", icon="✅")
+    
 
     with b_col3:
         # İndirme butonu stilini uydurmak için placeholder veya doğrudan st.download_button
@@ -1330,6 +1401,64 @@ with tab2:
             del st.session_state.df_muhasebe
             if 'muhasebe_versions' in st.session_state: del st.session_state.muhasebe_versions
             st.rerun()
+
+    with b_col5:
+        if st.button("💾 DB Kaydet"):
+            # 1. Session state'deki güncel veriyi al
+            df_save = st.session_state.df_muhasebe.copy()
+
+            # 2. Kolon isimlerini veritabanı şemasıyla birebir eşitle
+            df_save.rename(columns={
+                "Acente Adı": "acente_adi",
+                "Ay": "ay",
+                "Acente Net Prim": "net_prim",
+                "Toplam Komisyon": "toplam_komisyon",
+                "Komisyon %": "komisyon_orani",
+                "Acente Toplam Kazanç": "toplam_kazanc",
+                "Acenteye Ödenen Komisyon": "odenen_komisyon",
+                "Kalan Komisyon Tutarı": "kalan_komisyon"
+            }, inplace=True)
+
+            # 3. Veri tipini garantiye al (Hata payını azaltmak için)
+            numeric_cols = ["net_prim", "toplam_komisyon", "komisyon_orani", "toplam_kazanc", "odenen_komisyon", "kalan_komisyon"]
+            for col in numeric_cols:
+                df_save[col] = pd.to_numeric(df_save[col], errors="coerce").fillna(0)
+
+            # 4. Fonksiyonu çağır ve işlemi yapan kullanıcıyı (session_state.user) gönder
+            try:
+                # db.py içindeki upsert_muhasebe fonksiyonunu çağırıyoruz
+                from db import upsert_muhasebe 
+            
+                upsert_muhasebe(df_save, st.session_state.user)
+            
+                st.success(f"✅ Değişiklikler '{st.session_state.user}' tarafından başarıyla kaydedildi!")
+            
+                # Değişiklikleri ekranda anında görmek için sayfayı yenile
+                st.rerun()
+            
+            except Exception as e:
+                st.error(f"❌ Veritabanına kayıt sırasında bir hata oluştu: {e}")
+
+            # 4️⃣ KOLON SIRASI
+            df_save = df_save[[
+                "acente_adi",
+                "ay",
+                "net_prim",
+                "toplam_komisyon",
+                "komisyon_orani",
+                "toplam_kazanc",
+                "odenen_komisyon",
+                "kalan_komisyon"
+            ]]
+
+            # 5️⃣ TARİH
+            df_save["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+            # 6️⃣ DB
+            upsert_muhasebe(df_save)
+
+            st.success(f"{st.session_state.user} tarafından DB'ye kaydedildi ✅")
+            st.rerun()        
 
     st.write("---")
 
@@ -1357,6 +1486,7 @@ with tab2:
             col_v1.info(f"**{v['version_name']}** - Saat: {v['timestamp']}")
             with col_v2:
                 st.download_button("İndir", _to_excel_bytes(v["df"]), file_name=f"{v['version_name']}.xlsx", key=f"dl_{v['version_name']}")
+                
 
 
 
