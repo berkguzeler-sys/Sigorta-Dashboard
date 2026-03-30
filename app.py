@@ -3,6 +3,43 @@ import pandas as pd
 import plotly.express as px
 import time
 import numpy as np
+from db import delete_anlasma_log
+from db import get_user
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+from db import (
+    load_komisyon_anlasmalari,
+    upsert_komisyon_anlasmalari,
+    load_muhasebe,
+    save_muhasebe
+)
+
+from db import save_anlasma_log, load_anlasma_log
+
+
+if st.session_state.user is None:
+
+    st.title("🔐 Giriş Yap")
+
+    username = st.text_input("Kullanıcı Adı")
+    password = st.text_input("Şifre", type="password")
+
+    if st.button("Giriş"):
+
+        user = get_user(username)
+
+        if user and user["password"] == password:
+            st.session_state.user = username
+            st.success("Giriş başarılı ✅")
+            st.rerun()
+        else:
+            st.error("Hatalı giriş ❌")
+
+    st.stop()
+
+st.sidebar.success(f"👤 {st.session_state.user}")    
 
 # --------------------------------------------------
 # SAYFA AYARI
@@ -194,7 +231,7 @@ div[data-testid="stDataEditor"] * {
 st.title("📊 Polipedia Analiz")
 
 # Sekmeler
-tab1, tab2,= st.tabs(["📊 Dashboard", "💰 Muhasebe"])
+tab1, tab2, tab3= st.tabs(["📊 Dashboard", "💰 Muhasebe","📑 Komisyon Anlaşmaları"])
 
 # --------------------------------------------------
 # VERİ KAYNAĞI
@@ -1320,3 +1357,251 @@ with tab2:
             col_v1.info(f"**{v['version_name']}** - Saat: {v['timestamp']}")
             with col_v2:
                 st.download_button("İndir", _to_excel_bytes(v["df"]), file_name=f"{v['version_name']}.xlsx", key=f"dl_{v['version_name']}")
+
+
+
+
+# --------------------------------------------------
+# 📑 KOMİSYON ANLAŞMALARI (DB + LOG + DELETE)
+# --------------------------------------------------
+with tab3:
+    st.subheader("📑 Komisyon Anlaşmaları Yönetimi")
+
+    from datetime import datetime
+    import io
+
+    # -----------------------------
+    # 🔥 DB LOAD
+    # -----------------------------
+    db_anlasma = load_komisyon_anlasmalari()
+
+    if "updated_at" not in db_anlasma.columns:
+        db_anlasma["updated_at"] = None
+
+    # -----------------------------
+    # 🔥 EXCEL DATA
+    # -----------------------------
+    df_init = df.groupby("Acente Adı", as_index=False).agg({
+        "Komisyon Oranı (%)": "mean"
+    })
+
+    df_init.rename(columns={
+        "Acente Adı": "acente_adi",
+        "Komisyon Oranı (%)": "komisyon_orani"
+    }, inplace=True)
+
+    # -----------------------------
+    # 🔥 MERGE
+    # -----------------------------
+    if not db_anlasma.empty:
+        df_init = df_init.merge(
+            db_anlasma[[
+                "acente_adi",
+                "ekran_ucreti_alindi_mi",
+                "anlasma_bicimi",
+                "komisyon_orani",
+                "updated_at"
+            ]],
+            on="acente_adi",
+            how="left",
+            suffixes=("_excel", "_db")
+        )
+
+        df_init["komisyon_orani"] = df_init["komisyon_orani_db"].fillna(df_init["komisyon_orani_excel"])
+        df_init["ekran_ucreti_alindi_mi"] = df_init["ekran_ucreti_alindi_mi"].fillna("Hayır")
+        df_init["anlasma_bicimi"] = df_init["anlasma_bicimi"].fillna("")
+        df_init["updated_at"] = df_init["updated_at"].fillna("-")
+
+        df_init = df_init[[
+            "acente_adi",
+            "komisyon_orani",
+            "ekran_ucreti_alindi_mi",
+            "anlasma_bicimi",
+            "updated_at"
+        ]]
+
+    else:
+        df_init["ekran_ucreti_alindi_mi"] = "Hayır"
+        df_init["anlasma_bicimi"] = ""
+        df_init["updated_at"] = "-"
+
+    # -----------------------------
+    # 🔥 UI İSİMLERİ
+    # -----------------------------
+    df_init.rename(columns={
+        "acente_adi": "Acente Adı",
+        "komisyon_orani": "Komisyon Oranı (%)",
+        "ekran_ucreti_alindi_mi": "Ekran Ücreti Alındı mı?",
+        "anlasma_bicimi": "Anlaşma Biçimi",
+        "updated_at": "Son Güncelleme"
+    }, inplace=True)
+
+    # -----------------------------
+    # 📥 EXPORT
+    # -----------------------------
+    def export_excel(df_export):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df_export.to_excel(writer, index=False)
+        return output.getvalue()
+
+    # -----------------------------
+    # 🔍 FİLTRE
+    # -----------------------------
+    with st.expander("🔍 Filtrele", expanded=False):
+        col1, col2 = st.columns([3,1])
+
+        with col1:
+            filtre_acente = st.multiselect(
+                "Acente Seç",
+                sorted(df_init["Acente Adı"].unique())
+            )
+
+        with col2:
+            if st.button("🧹 Temizle"):
+                st.rerun()
+
+    df_view = df_init.copy()
+
+    if filtre_acente:
+        df_view = df_view[df_view["Acente Adı"].isin(filtre_acente)]
+
+    # -----------------------------
+    # 📊 DATA EDITOR
+    # -----------------------------
+    edited_df = st.data_editor(
+        df_view,
+        use_container_width=True,
+        height=400,
+        hide_index=True,
+        column_config={
+            "Acente Adı": st.column_config.TextColumn(disabled=True),
+            "Komisyon Oranı (%)": st.column_config.NumberColumn(min_value=0, max_value=100),
+            "Ekran Ücreti Alındı mı?": st.column_config.SelectboxColumn(options=["Evet", "Hayır"]),
+            "Anlaşma Biçimi": st.column_config.TextColumn(),
+            "Son Güncelleme": st.column_config.TextColumn(disabled=True)
+        }
+    )
+
+    # -----------------------------
+    # 💾 KAYDET
+    # -----------------------------
+    if st.button("💾 Kaydet"):
+
+        # 🔥 BU SATIR ŞART
+        df_save = edited_df.copy()
+
+        # 🔥 BURASI df_save TANIMLANDIKTAN SONRA GELMELİ
+        df_save.rename(columns={
+            "Acente Adı": "acente_adi",
+            "Komisyon Oranı (%)": "komisyon_orani",
+            "Ekran Ücreti Alındı mı?": "ekran_ucreti_alindi_mi",
+            "Anlaşma Biçimi": "anlasma_bicimi",
+            "Son Güncelleme": "updated_at"
+        }, inplace=True)
+
+        df_save["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        # 🔥 ESKİ VERİ
+        df_old = load_komisyon_anlasmalari()
+
+        if not df_old.empty:
+
+            df_old = df_old[[
+                "acente_adi",
+                "komisyon_orani",
+                "ekran_ucreti_alindi_mi",
+                "anlasma_bicimi"
+            ]]
+
+            df_new = df_save[[
+                "acente_adi",
+                "komisyon_orani",
+                "ekran_ucreti_alindi_mi",
+                "anlasma_bicimi"
+            ]]
+
+            df_compare = df_new.merge(
+                df_old,
+                on="acente_adi",
+                how="left",
+                suffixes=("_new", "_old")
+            )
+
+            df_changed = df_compare[
+                (df_compare["komisyon_orani_new"] != df_compare["komisyon_orani_old"]) |
+                (df_compare["ekran_ucreti_alindi_mi_new"] != df_compare["ekran_ucreti_alindi_mi_old"]) |
+                (df_compare["anlasma_bicimi_new"] != df_compare["anlasma_bicimi_old"])
+            ]
+
+            df_log = df_changed[[
+                "acente_adi",
+                "komisyon_orani_new",
+                "ekran_ucreti_alindi_mi_new",
+                "anlasma_bicimi_new"
+            ]].copy()
+
+            df_log.rename(columns={
+                "komisyon_orani_new": "komisyon_orani",
+                "ekran_ucreti_alindi_mi_new": "ekran_ucreti_alindi_mi",
+                "anlasma_bicimi_new": "anlasma_bicimi"
+            }, inplace=True)
+
+            if not df_log.empty:
+                save_anlasma_log(df_log,st.session_state.user)
+
+        else:
+            save_anlasma_log(df_save,st.session_state.user)
+
+        # 🔥 HER ZAMAN ANA TABLOYA YAZ
+        upsert_komisyon_anlasmalari(df_save)
+
+        st.success("Kaydedildi (delta log aktif) ✅")
+        st.rerun()
+
+    # -----------------------------
+    # 📥 EXPORT
+    # -----------------------------
+    st.download_button(
+        "📥 Excel İndir",
+        data=export_excel(df_init),
+        file_name="komisyon_anlasmalari.xlsx"
+    )
+
+    # -----------------------------
+    # 🔥 VERSİYON GEÇMİŞİ + DELETE
+    # -----------------------------
+    st.divider()
+    st.subheader("📂 Versiyon Geçmişi")
+
+    log_df = load_anlasma_log()
+
+    if not log_df.empty:
+
+        version_list = log_df["version_time"].unique()
+
+        secilen = st.selectbox("Versiyon Seç", version_list)
+
+        df_secili = log_df[log_df["version_time"] == secilen]
+
+        st.dataframe(df_secili)
+
+        col1, col2 = st.columns(2)
+
+        # 🔄 GERİ AL
+        with col1:
+            if st.button("⏪ Bu Versiyona Dön"):
+                df_restore = df_secili.drop(columns=["id", "version_time"])
+
+                upsert_komisyon_anlasmalari(df_restore)
+
+                st.success("Geri alındı ✅")
+                st.rerun()
+
+        # 🗑️ SİL
+        with col2:
+            if st.button("🗑️ Versiyonu Sil"):
+                delete_anlasma_log(secilen)
+
+                st.warning("Versiyon silindi 🗑️")
+                st.rerun()
