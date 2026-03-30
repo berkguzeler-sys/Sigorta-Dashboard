@@ -49,6 +49,19 @@ st.sidebar.success(f"👤 {st.session_state.user}")
 # --------------------------------------------------
 st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 
+# 🔥 RESET BUTONU (SIDEBAR)
+if st.sidebar.button("🧹 Tüm Veriyi Sıfırla"):
+    from sqlalchemy import text
+    from db import get_engine
+
+    with get_engine().begin() as conn:
+        conn.execute(text("DELETE FROM ham_veriler"))
+        conn.execute(text("DELETE FROM islenmis_veriler"))
+        conn.execute(text("DELETE FROM muhasebe_kayitlari"))
+
+    st.success("Tüm veri silindi ✅")
+    st.rerun()
+
 import streamlit as st
 import os
 
@@ -504,24 +517,13 @@ def run_etl(data):
 # --------------------------------------------------
 try:
     if uploaded_file is not None:
-        # A. EXCEL'DEN OKU
+
         df_incoming = load_data(uploaded_file)
-        
-        # B. BRONZ KATMAN: Sadece yeni satırları DB'ye ekle (Mükerrer kontrolü yapar)
-        from db import save_raw_data_to_db, save_processed_data, upsert_muhasebe_from_dashboard
-        eklenen_sayisi = save_raw_data_to_db(df_incoming)
-        
-        # C. TOPLAM VERİYİ ÇEK: DB'deki tüm birikmiş ham veriyi al
-        from db import get_engine
-        df_total_raw = pd.read_sql("SELECT * FROM ham_veriler", get_engine())
-        
-        # D. İŞLEME (GÜMÜŞ): run_etl ile hesaplamaları yap (Branş, Kazanç, İptal vb.)
-        df = run_etl(df_total_raw)
-        
-        # E. GÜMÜŞ KAYIT: Hesaplanmış haliyle 'islenmis_veriler' tablosuna yaz
+        df = run_etl(df_incoming)
+
+        from db import save_processed_data, upsert_muhasebe_from_dashboard
         save_processed_data(df)
-        
-        # F. ALTIN KATMAN: Muhasebe özetini güncelle (Manuel oranları korur)
+
         if not df.empty:
             df_muhasebe_sync = df.groupby(["Acente Adı", "Ay"]).agg({
                 "Net Prim": "sum",
@@ -540,26 +542,21 @@ try:
             }, inplace=True)
 
             upsert_muhasebe_from_dashboard(df_muhasebe_sync, st.session_state.user)
-            
-            if eklenen_sayisi > 0:
-                st.sidebar.success(f"✅ {eklenen_sayisi} yeni kayıt eklendi!")
-            else:
-                st.sidebar.info("ℹ️ Excel'deki kayıtlar zaten mevcut.")
+
+        st.sidebar.success("✅ Veri güncellendi!")
+
     else:
-        # Excel yoksa Dashboard'u İŞLENMİŞ veriden besle (Hızlı Açılış)
         from db import load_processed_data
         df = load_processed_data()
-        
+        df["Tanzim Tarihi"] = pd.to_datetime(df["Tanzim Tarihi"], errors="coerce")
+        min_date = df["Tanzim Tarihi"].min().date()
+
         if df.empty:
-            # DB bomboşsa (ilk çalıştırma) varsayılan URL'den çek
-            df_raw = load_data(excel_url)
-            df = run_etl(df_raw)
-            # İlk kurulumda tabloları oluşturması için:
-            save_processed_data(df)
-            
+            st.warning("⚠️ Henüz veri yok. Lütfen Excel yükleyin.")
+            st.stop()
+
 except Exception as e:
-    st.error(f"❌ Veri akış hatası: {e}")
-    st.stop()
+    st.error(f"❌ Hata oluştu: {e}")
 
 
 # --------------------------------------------------
