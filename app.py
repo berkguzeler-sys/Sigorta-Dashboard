@@ -21,6 +21,11 @@ from db import (
 
 from db import save_anlasma_log, load_anlasma_log
 
+@st.cache_data
+def load_processed_cached():
+    from db import load_processed_data
+    return load_processed_data()
+
 
 if st.session_state.user is None:
 
@@ -65,13 +70,16 @@ if st.sidebar.button("🧹 Tüm Veriyi Sıfırla"):
 import streamlit as st
 import os
 
-def load_svg_maskot(file_path):
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return None
+@st.cache_resource # Bir kez yükle, hafızada tut
+def get_cached_resources():
+    def load_svg_maskot(file_path):
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                return f.read()
+        return None
+    return load_svg_maskot("maskot-onay-01.svg")
 
-svg_icon = load_svg_maskot("maskot-onay-01.svg")
+svg_icon = get_cached_resources()
 
 if svg_icon:
     st.markdown(f"""
@@ -265,6 +273,8 @@ def load_data(source):
 
 def run_etl(data):
     df = data.copy()
+
+    
 
     # --------------------------------------------------
     # KOLON İSİMLERİNİ TEMİZLE
@@ -1037,21 +1047,50 @@ with tab1:
     # --------------------------------------------------
     # ANALİZLER (Üst Bareme Yakın & Pasif)
     # --------------------------------------------------
+    # --------------------------------------------------
+    # 🚀 Bir Üst Bareme En Yakın 5 Acente (Orijinal Mantık - Filtreli Veri)
+    # --------------------------------------------------
     st.subheader("🚀 Bir Üst Bareme En Yakın 5 Acente")
-    son_ay = df_acente_aylik["Ay"].max()
-    df_yakin = df_acente_aylik[df_acente_aylik["Ay"] == son_ay].copy()
-    df_yakin = df_yakin[df_yakin["Bir Üst Bareme Kalan Tutar"] > 0]
-    df_yakin = df_yakin.sort_values("Bir Üst Bareme Kalan Tutar").head(5)
 
-    if not df_yakin.empty:
-        df_yakin_display = df_yakin.copy()
-        df_yakin_display["Acente Net Prim"] = df_yakin_display["Acente Net Prim"].apply(lambda x: f"₺{x:,.0f}")
-        df_yakin_display["Bir Üst Bareme Kalan Tutar"] = df_yakin_display["Bir Üst Bareme Kalan Tutar"].apply(lambda x: f"₺{x:,.0f}")
-        st.dataframe(df_yakin_display[["Acente Adı", "Ay", "Acente Net Prim", "Barem", "Bir Üst Bareme Kalan Tutar"]], use_container_width=True)
+    # ETL'den gelen ana tabloyu (df_filtre) acente ve ay bazında özetleyelim
+    df_barem_analiz = df_filtre[df_filtre["Acente Adı"].str.upper() != "POLIPEDIA"].copy()
+
+    if not df_barem_analiz.empty:
+        # Acente ve Ay bazında toplam üretimi alalım (ETL'deki gibi)
+        df_ozet = df_barem_analiz.groupby(["Acente Adı", "Ay"])["Acente Net Prim"].sum().reset_index()
+
+        # Barem hesaplama fonksiyonu (Basit ve net)
+        def barem_hesapla(x):
+            if x <= 250000:
+             return "0-250K", 250000 - x
+            elif x <= 500000:
+                return "250K-500K", 500000 - x
+            else:
+                return "500K+", 0
+
+        # Hesaplamaları uygula
+        df_ozet["Sonuç"] = df_ozet["Acente Net Prim"].apply(barem_hesapla)
+        df_ozet["Mevcut Barem"] = df_ozet["Sonuç"].apply(lambda x: x[0])
+        df_ozet["Bir Üst Bareme Kalan Tutar"] = df_ozet["Sonuç"].apply(lambda x: x[1])
+
+        # Sadece hedefi olanları (Kalan > 0) al ve en yakınları (küçük tutar) getir
+        df_final = df_ozet[df_ozet["Bir Üst Bareme Kalan Tutar"] > 0].sort_values("Bir Üst Bareme Kalan Tutar").head(5)
+
+        if not df_final.empty:
+            # Görüntüleme formatı
+            df_display = df_final.copy()
+            df_display["Acente Net Prim"] = df_display["Acente Net Prim"].map("₺{:,.0f}".format)
+            df_display["Bir Üst Bareme Kalan Tutar"] = df_display["Bir Üst Bareme Kalan Tutar"].map("₺{:,.0f}".format)
+        
+            st.dataframe(
+                df_display[["Acente Adı", "Ay", "Acente Net Prim", "Mevcut Barem", "Bir Üst Bareme Kalan Tutar"]],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Seçili kriterlerde barem atlamaya yakın acente bulunamadı.")
     else:
-        st.info("Uygun veri bulunamadı")
-
-    st.divider()
+        st.warning("Veri bulunamadı.")
  
 
 
