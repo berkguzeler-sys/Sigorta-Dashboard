@@ -4,20 +4,48 @@ import plotly.express as px
 import time
 import numpy as np
 import io  
-from db import delete_anlasma_log
-from db import get_user
-from db import upsert_muhasebe
+from datetime import datetime
 
-if "user" not in st.session_state:
-    st.session_state.user = None
+# ==================================================
+# 1. ADIM: SAYFA YAPILANDIRMASI (MUTLAKA İLK SIRADA!)
+# ==================================================
+# Bu komuttan önce hiçbir st. komutu (st.write, st.title vb.) çalışmamalıdır.
+st.set_page_config(
+    page_title="Polipedia Analiz", 
+    layout="wide", 
+    page_icon="📊"
+)
 
+# ==================================================
+# 2. ADIM: VERİTABANI VE FONKSİYON İTHALATI
+# ==================================================
+# Sayfa ayarından hemen sonra db fonksiyonlarını içeri alıyoruz.
 from db import (
     load_komisyon_anlasmalari,
     upsert_komisyon_anlasmalari,
     load_muhasebe,
     upsert_muhasebe,
-    save_processed_data
+    save_processed_data,
+    delete_anlasma_log,
+    get_user, 
+    save_anlasma_log, 
+    load_anlasma_log,
+    load_processed_data # Eğer cache kullanacaksan bunu da ekle
 )
+
+# ==================================================
+# 3. ADIM: OTURUM YÖNETİMİ (SESSION STATE)
+# ==================================================
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+# ==================================================
+# 4. ADIM: YARDIMCI FONKSİYONLAR (CACHE)
+# ==================================================
+@st.cache_data
+def load_processed_cached():
+    """İşlenmiş veriyi hafızada tutarak hızı artırır."""
+    return load_processed_data()
 
 from db import save_anlasma_log, load_anlasma_log
 
