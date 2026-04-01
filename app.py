@@ -7,6 +7,9 @@ import io
 from db import delete_anlasma_log
 from db import get_user
 from db import upsert_muhasebe
+from db import save_anlasma_log, load_anlasma_log
+
+st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -19,7 +22,7 @@ from db import (
     save_processed_data
 )
 
-from db import save_anlasma_log, load_anlasma_log
+
 
 @st.cache_data
 def load_processed_cached():
@@ -52,8 +55,6 @@ st.sidebar.success(f"👤 {st.session_state.user}")
 # --------------------------------------------------
 # SAYFA AYARI
 # --------------------------------------------------
-st.set_page_config(page_title="Polipedia Analiz", layout="wide")
-
 # 🔥 RESET BUTONU (SIDEBAR)
 if st.sidebar.button("🧹 Tüm Veriyi Sıfırla"):
     from sqlalchemy import text
