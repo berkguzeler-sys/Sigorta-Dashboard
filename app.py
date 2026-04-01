@@ -1,4 +1,5 @@
 import streamlit as st
+st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 import pandas as pd
 import plotly.express as px
 import time
@@ -52,7 +53,7 @@ st.sidebar.success(f"👤 {st.session_state.user}")
 # --------------------------------------------------
 # SAYFA AYARI
 # --------------------------------------------------
-st.set_page_config(page_title="Polipedia Analiz", layout="wide")
+
 
 # 🔥 RESET BUTONU (SIDEBAR)
 if st.sidebar.button("🧹 Tüm Veriyi Sıfırla"):
