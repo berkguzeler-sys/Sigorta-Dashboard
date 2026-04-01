@@ -1321,7 +1321,7 @@ with tab1:
 # --------------------------------------------------
     st.subheader("🏆 Acente Performans Özeti")
 
-    col_perf1, col_perf2, col_perf3= st.columns(3)
+    col_perf1, col_perf2,= st.columns(2)
 
     with col_perf1:
         st.markdown("### 🚀 En Çok Üreten 5 Acente")
@@ -1370,41 +1370,7 @@ with tab1:
             st.dataframe(df_pasif, use_container_width=True, height=315)
         else:
             st.success("Tüm acenteler son 1 ayda üretim yapmış 🎯")
-    with col_perf3:
-        st.markdown("### 💤 Bugüne Kadar Hiç Üretim Yapmamış Acenteler")
 
-        # Tüm potansiyel acenteler
-        tum_acente = sorted(
-            df["Acente Adı"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .unique()
-        )
-
-        # Üretim yapmış olanlar
-        uretim_yapanlar = set(
-            df[
-                (df["Acente Adı"].fillna("").str.upper() != "POLIPEDIA") &
-                (pd.to_numeric(df["Net Prim"], errors="coerce").fillna(0) > 0)
-            ]["Acente Adı"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .unique()
-        )
-
-        # Hiç üretim yapmamış olanlar
-        hic_uretim_yapmayanlar = [
-            acente for acente in tum_acente
-            if acente.upper() != "POLIPEDIA" and acente not in uretim_yapanlar
-        ]
-
-        if hic_uretim_yapmayanlar:
-            df_hic_uretim = pd.DataFrame(hic_uretim_yapmayanlar, columns=["Acente Adı"])
-            st.dataframe(df_hic_uretim, use_container_width=True, height=315)
-        else:
-            st.success("Bugüne kadar üretim yapmamış acente bulunmuyor 🎯")
     st.divider()    
 
 with tab2:
