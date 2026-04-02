@@ -1,5 +1,4 @@
 import streamlit as st
-st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 import pandas as pd
 import plotly.express as px
 import time
@@ -53,7 +52,7 @@ st.sidebar.success(f"👤 {st.session_state.user}")
 # --------------------------------------------------
 # SAYFA AYARI
 # --------------------------------------------------
-
+st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 
 # 🔥 RESET BUTONU (SIDEBAR)
 if st.sidebar.button("🧹 Tüm Veriyi Sıfırla"):
@@ -626,7 +625,7 @@ color_map = {ptype: premium_colors[i % len(premium_colors)] for i, ptype in enum
 # --------------------------------------------------
 with tab1:
     # KPI
-    toplam_poliçe = df_filtre["Poliçe No"].count()
+    toplam_poliçe = pd.to_numeric(df_filtre["Poliçe Adet"], errors="coerce").fillna(0).sum()
     toplam_net_prim = pd.to_numeric(df_filtre["Net Prim"], errors="coerce").fillna(0).sum()
     toplam_acente_adet = pd.to_numeric(df_filtre["Acente Adet"], errors="coerce").fillna(0).sum()
     toplam_polipedia_adet = pd.to_numeric(df_filtre["Polipedia Adet"], errors="coerce").fillna(0).sum()
