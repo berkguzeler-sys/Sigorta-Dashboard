@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine, text
 import pandas as pd
 from datetime import datetime
+import os
 
 # --------------------------------------------------
-# 🔗 DB CONNECTION
-# --------------------------------------------------
-engine = create_engine("sqlite:///polipedia.db", echo=False)
+db_path = "polipedia.db"
+engine = create_engine(f"sqlite:///{db_path}", echo=False)
 
 # --------------------------------------------------
 # 👤 USERS
@@ -309,7 +309,60 @@ def upsert_muhasebe_from_dashboard(df_dashboard, current_user):
                     "tk": row["toplam_kazanc"], "u": simdi, "ub": current_user
                 })
                 
+def load_sirket_ay_analizi():
+    try:
+        return pd.read_sql("SELECT * FROM sirket_ay_analizi", engine)
+    except:
+        return pd.DataFrame(columns=[
+            "ay",
+            "sigorta_sirketi",
+            "islem_tipi",
+            "tutar",
+            "updated_at",
+            "updated_by"
+        ])
 
+
+def upsert_sirket_ay_analizi(df, current_user):
+    from sqlalchemy import text
+    from datetime import datetime
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS sirket_ay_analizi (
+            ay TEXT,
+            sigorta_sirketi TEXT,
+            islem_tipi TEXT,
+            tutar REAL,
+            updated_at TEXT,
+            updated_by TEXT,
+            PRIMARY KEY (ay, sigorta_sirketi, islem_tipi)
+        )
+        """))
+
+        simdi = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for _, row in df.iterrows():
+            conn.execute(text("""
+                INSERT OR REPLACE INTO sirket_ay_analizi (
+                    ay,
+                    sigorta_sirketi,
+                    islem_tipi,
+                    tutar,
+                    updated_at,
+                    updated_by
+                )
+                VALUES (:ay, :s, :i, :t, :u, :ub)
+            """), {
+                "ay": row["ay"],
+                "s": row["sigorta_sirketi"],
+                "i": row["islem_tipi"],
+                "t": float(row["tutar"]),
+                "u": simdi,
+                "ub": current_user
+            })
+
+            
 def upsert_muhasebe(df, current_user):
     from sqlalchemy import text
     from datetime import datetime
@@ -386,3 +439,4 @@ def upsert_muhasebe(df, current_user):
                     "u": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "ub": current_user
                 })
+         
