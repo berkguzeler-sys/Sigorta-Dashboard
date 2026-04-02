@@ -7,6 +7,7 @@ import io
 from db import delete_anlasma_log
 from db import get_user
 from db import upsert_muhasebe
+from db import upsert_sirket_ay_analizi
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -255,7 +256,7 @@ div[data-testid="stDataEditor"] * {
 st.title("📊 Polipedia Analiz")
 
 # Sekmeler
-tab1, tab2, tab3= st.tabs(["📊 Dashboard", "💰 Muhasebe","📑 Komisyon Anlaşmaları"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "💰 Muhasebe","📑 Komisyon Anlaşmaları","🏢 Şirket / Ay Analizi"])
 
 # --------------------------------------------------
 # VERİ KAYNAĞI
@@ -1896,3 +1897,263 @@ with tab3:
 
                 st.warning("Versiyon silindi 🗑️")
                 st.rerun()
+
+
+
+    with tab4:
+        st.subheader("🏢 Şirket / Ay Bazında Komisyon - İade Analizi")
+
+        ay_sirasi = [
+            "2025 KASIM", "2025 ARALIK",
+            "2026 OCAK", "2026 ŞUBAT", "2026 MART", "2026 NİSAN",
+            "2026 MAYIS", "2026 HAZİRAN", "2026 TEMMUZ", "2026 AĞUSTOS",
+            "2026 EYLÜL", "2026 EKİM", "2026 KASIM", "2026 ARALIK"
+        ]
+
+        ay_map_num = {
+            1: "OCAK",
+            2: "ŞUBAT",
+            3: "MART",
+            4: "NİSAN",
+            5: "MAYIS",
+            6: "HAZİRAN",
+            7: "TEMMUZ",
+            8: "AĞUSTOS",
+            9: "EYLÜL",
+            10: "EKİM",
+            11: "KASIM",
+            12: "ARALIK"
+        }
+
+        st.markdown("""
+        <style>
+        .premium-summary-card {
+            background: linear-gradient(135deg, rgba(106,36,115,0.30), rgba(33,42,53,0.85));
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 18px;
+            padding: 18px 20px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+            backdrop-filter: blur(10px);
+            min-height: 110px;
+        }
+        .premium-summary-title {
+            color: #CBD5E1;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            letter-spacing: 0.3px;
+        }
+        .premium-summary-value {
+            color: #F8FAFC;
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        if "Sigorta Şirketi" not in df_filtre.columns:
+            st.warning("Sigorta Şirketi kolonu bulunamadı.")
+        elif "Kayıt Türü" not in df_filtre.columns:
+            st.warning("Kayıt Türü kolonu bulunamadı.")
+        elif "Toplam Komisyon" not in df_filtre.columns:
+            st.warning("Toplam Komisyon kolonu bulunamadı.")
+        elif "Tanzim Tarihi" not in df_filtre.columns:
+            st.warning("Tanzim Tarihi kolonu bulunamadı.")
+        else:
+            df_sirket = df_filtre.copy()
+
+            df_sirket["Sigorta Şirketi"] = (
+                df_sirket["Sigorta Şirketi"]
+                .astype(str)
+                .str.strip()
+                .str.upper()
+            )
+
+            df_sirket["Kayıt Türü"] = (
+                df_sirket["Kayıt Türü"]
+                .astype(str)
+                .str.strip()
+            )
+
+            df_sirket["Toplam Komisyon"] = pd.to_numeric(
+                df_sirket["Toplam Komisyon"], errors="coerce"
+            ).fillna(0.0).astype(float)
+
+            df_sirket["Tanzim Tarihi"] = pd.to_datetime(
+                df_sirket["Tanzim Tarihi"], errors="coerce"
+            )
+
+            df_sirket = df_sirket[
+                df_sirket["Tanzim Tarihi"].notna() &
+                df_sirket["Sigorta Şirketi"].notna()
+            ].copy()
+
+            df_sirket["YIL"] = df_sirket["Tanzim Tarihi"].dt.year
+            df_sirket["AY_NO"] = df_sirket["Tanzim Tarihi"].dt.month
+            df_sirket["AY_ADI"] = df_sirket["AY_NO"].map(ay_map_num)
+            df_sirket["AYLAR"] = df_sirket["YIL"].astype(str) + " " + df_sirket["AY_ADI"]
+
+            df_sirket["İşlem Tipi"] = np.where(
+                df_sirket["Kayıt Türü"].isin(["Poliçe", "Prim Zeyl+"]),
+                "KOMİSYON",
+                np.where(
+                    df_sirket["Kayıt Türü"] == "İptal Zeyl-",
+                    "İADE",
+                    None
+                )
+            )
+
+            df_sirket = df_sirket[
+                df_sirket["AYLAR"].notna() &
+                df_sirket["İşlem Tipi"].notna()
+            ].copy()
+
+            df_sirket = df_sirket[df_sirket["AYLAR"].isin(ay_sirasi)].copy()
+
+            if df_sirket.empty:
+                st.info("Analize uygun kayıt bulunamadı.")
+            else:
+                df_gunluk = (
+                    df_sirket.groupby(
+                        ["Tanzim Tarihi", "AYLAR", "Sigorta Şirketi", "İşlem Tipi"],
+                        as_index=False
+                    )["Toplam Komisyon"]
+                    .sum()
+                )
+                df_gunluk["Toplam Komisyon"] = df_gunluk["Toplam Komisyon"].round(2)
+
+                df_aylik = (
+                    df_gunluk.groupby(
+                        ["AYLAR", "Sigorta Şirketi", "İşlem Tipi"],
+                        as_index=False
+                    )["Toplam Komisyon"]
+                    .sum()
+                )
+                df_aylik["Toplam Komisyon"] = df_aylik["Toplam Komisyon"].round(2)
+
+                pivot_sirket = df_aylik.pivot_table(
+                    index="AYLAR",
+                    columns=["Sigorta Şirketi", "İşlem Tipi"],
+                    values="Toplam Komisyon",
+                    aggfunc="sum",
+                    fill_value=0.0
+                )
+
+                pivot_sirket = pivot_sirket.reindex(ay_sirasi, fill_value=0.0)
+
+                sirketler = sorted(df_sirket["Sigorta Şirketi"].dropna().unique())
+
+                istenen_kolonlar = []
+                for sirket in sirketler:
+                    istenen_kolonlar.append((sirket, "KOMİSYON"))
+                    istenen_kolonlar.append((sirket, "İADE"))
+
+                pivot_sirket = pivot_sirket.reindex(columns=istenen_kolonlar, fill_value=0.0)
+                pivot_sirket = pivot_sirket.round(2)
+                pivot_sirket.index.name = "AYLAR"
+
+                st.dataframe(
+                    pivot_sirket.style.format("{:,.0f}"),
+                    use_container_width=True
+                )
+
+                toplam_komisyon = round(
+                    df_aylik.loc[
+                        df_aylik["İşlem Tipi"] == "KOMİSYON",
+                        "Toplam Komisyon"
+                    ].sum(),
+                    2
+                )
+
+                toplam_iade = round(
+                    df_aylik.loc[
+                        df_aylik["İşlem Tipi"] == "İADE",
+                        "Toplam Komisyon"
+                    ].sum(),
+                    2
+                )
+
+                net_sonuc = round(toplam_komisyon + toplam_iade, 2)
+
+                st.markdown("### Toplam Sonuç")
+
+                col_t1, col_t2, col_t3 = st.columns(3)
+
+                with col_t1:
+                    st.markdown(f"""
+                    <div class="premium-summary-card">
+                        <div class="premium-summary-title">Toplam Komisyon</div>
+                        <div class="premium-summary-value">{toplam_komisyon:,.0f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col_t2:
+                    st.markdown(f"""
+                    <div class="premium-summary-card">
+                        <div class="premium-summary-title">Toplam İade</div>
+                        <div class="premium-summary-value">{toplam_iade:,.0f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col_t3:
+                    st.markdown(f"""
+                    <div class="premium-summary-card">
+                        <div class="premium-summary-title">Komisyon + İade</div>
+                        <div class="premium-summary-value">{net_sonuc:,.0f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.write("")
+
+                # Excel export için düz tablo
+                df_export_tab4 = df_aylik.copy()
+                df_export_tab4 = df_export_tab4.rename(columns={
+                    "AYLAR": "Ay",
+                    "Sigorta Şirketi": "Sigorta Şirketi",
+                    "İşlem Tipi": "İşlem Tipi",
+                    "Toplam Komisyon": "Tutar"
+                })
+
+                output_tab4 = io.BytesIO()
+                with pd.ExcelWriter(output_tab4, engine="openpyxl") as writer:
+                    pivot_sirket.to_excel(writer, sheet_name="Pivot Görünüm")
+                    df_export_tab4.to_excel(writer, index=False, sheet_name="Detay Veri")
+
+                excel_data_tab4 = output_tab4.getvalue()
+
+                b1, b2 = st.columns(2)
+
+                with b1:
+                    st.download_button(
+                        "📥 Excel Olarak Al",
+                        data=excel_data_tab4,
+                        file_name="sirket_ay_komisyon_iade_analizi.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key="tab4_excel_download"
+                    )
+
+                with b2:
+                    if st.button("💾 DB Kaydet", key="btn_tab4_db_kaydet"):
+                        try:
+                            df_save_tab4 = df_aylik.copy()
+
+                            df_save_tab4.rename(columns={
+                                "AYLAR": "ay",
+                                "Sigorta Şirketi": "sigorta_sirketi",
+                                "İşlem Tipi": "islem_tipi",
+                                "Toplam Komisyon": "tutar"
+                            }, inplace=True)
+
+                            df_save_tab4["tutar"] = pd.to_numeric(
+                                df_save_tab4["tutar"], errors="coerce"
+                            ).fillna(0.0)
+
+                            upsert_sirket_ay_analizi(
+                                df_save_tab4[["ay", "sigorta_sirketi", "islem_tipi", "tutar"]],
+                                st.session_state.user
+                            )
+
+                            st.success(f"✅ Şirket / Ay analizi '{st.session_state.user}' tarafından DB'ye kaydedildi.")
+                        except Exception as e:
+                            st.error(f"❌ DB kayıt hatası: {e}")
