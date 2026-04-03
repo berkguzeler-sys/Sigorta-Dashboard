@@ -569,8 +569,8 @@ try:
 except Exception as e:
     st.error(f"❌ Hata oluştu: {e}")
 
-
 # --------------------------------------------------
+
 # SIDEBAR FİLTRELER
 # --------------------------------------------------
 st.sidebar.header("🔎 Filtreler")
@@ -637,7 +637,28 @@ with tab1:
         pd.to_numeric(df_filtre.get("Acenteden Gelen Komisyon", 0), errors="coerce").fillna(0).sum()
     )
 
-    col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+    # Dağıtılan Komisyon = Tali Komisyon Toplamı / Asıl Komisyon (POLIPEDIA hariç)
+    acente_kolon = "Dış Acente Adı" if "Dış Acente Adı" in df_filtre.columns else "Acente Adı"
+    asil_komisyon_kolon = "Asıl Komisyon" if "Asıl Komisyon" in df_filtre.columns else "Toplam Komisyon"
+
+    toplam_tali_komisyon = pd.to_numeric(
+        df_filtre["Tali Komisyon"], errors="coerce"
+    ).fillna(0).sum()
+
+    toplam_asil_komisyon_polipedia_haric = pd.to_numeric(
+        df_filtre.loc[
+            df_filtre[acente_kolon].astype(str).str.upper() != "POLIPEDIA",
+            asil_komisyon_kolon
+        ],
+        errors="coerce"
+    ).fillna(0).sum()
+
+    dagitilan_komisyon = (
+        (toplam_tali_komisyon / toplam_asil_komisyon_polipedia_haric) * 100
+        if toplam_asil_komisyon_polipedia_haric != 0 else 0
+    )
+
+    col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
     def tr_fmt(x, d=0, currency=False, percent=False):
         try:
             x = float(x)
@@ -673,6 +694,7 @@ with tab1:
     col5.markdown(kpi("Acente Komisyon", tr_fmt(toplam_acente_komisyon, d=0, currency=True)), unsafe_allow_html=True)
     col6.markdown(kpi("Polipedia Komisyon", tr_fmt(toplam_polipedia_komisyon, d=0, currency=True)), unsafe_allow_html=True)
     col7.markdown(kpi("Polipedia Gelir", tr_fmt(toplam_yk_kazanc, d=0, currency=True)), unsafe_allow_html=True)
+    col8.markdown(kpi("Dağıtılan Komisyon", tr_fmt(dagitilan_komisyon, d=2, percent=True)), unsafe_allow_html=True)
 
     st.divider()
 
