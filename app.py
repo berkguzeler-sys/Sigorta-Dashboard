@@ -1068,9 +1068,7 @@ with tab1:
         st.warning("Veri bulunamadı")
 
     # --------------------------------------------------
-    # ACENTE ANALİZ
-    # --------------------------------------------------
-    # --------------------------------------------------
+   
     # ACENTE ANALİZ TABLOSU
     # --------------------------------------------------
     st.subheader("📊 Aylık Acente Net Prim (Polipedia Hariç)")
@@ -1439,7 +1437,7 @@ with tab1:
 
     st.divider()    
 
-    # BURADAN BAŞLAYARAK SEÇ...
+with tab2:# BURADAN BAŞLAYARAK SEÇ...
     st.subheader("💰 Muhasebe ve Komisyon Düzenleme")
     
     # 1. DB'den veriyi çek
@@ -1473,7 +1471,7 @@ with tab1:
         else:
             st.warning("Henüz veritabanında muhasebe kaydı yok. Lütfen dashboard verisini yükleyin.")
             st.stop()
-    # ... BURAYA KADAR SİL. (Aşağıdaki CSS kısmına dokunma)
+    
 
     # --- PREMIUM CSS (Tüm Butonlar ve Kartlar İçin) ---
     st.markdown("""
