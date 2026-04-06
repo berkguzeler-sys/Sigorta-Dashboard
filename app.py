@@ -3,8 +3,7 @@ import pandas as pd
 import plotly.express as px
 import time
 import numpy as np
-import io
-st.set_page_config(page_title="Polipedia Analiz", layout="wide")
+import io  
 from db import delete_anlasma_log
 from db import get_user
 from db import upsert_muhasebe
@@ -53,7 +52,8 @@ st.sidebar.success(f"👤 {st.session_state.user}")
 
 # --------------------------------------------------
 # SAYFA AYARI
-
+# --------------------------------------------------
+st.set_page_config(page_title="Polipedia Analiz", layout="wide")
 
 # 🔥 RESET BUTONU (SIDEBAR)
 if st.sidebar.button("🧹 Tüm Veriyi Sıfırla"):
@@ -275,7 +275,29 @@ def load_data(source):
 def run_etl(data):
     df = data.copy()
 
-    
+    # SABİT KOMİSYON VERİLEN ACENTELER
+    # Dış Acente Adı Temizliği kısmını bununla değiştir:
+    if "Dış Acente Adı" in df.columns:
+        df["Dış Acente Adı"] = (
+            df["Dış Acente Adı"]
+            .fillna('POLIPEDIA')
+            .astype(str)
+            .str.strip() # Kenar boşluklarını siler
+            .str.upper() # Büyük harf yapar
+        )
+    # --------------------------------------------------
+    manuel_komisyonlar = {
+        "SEVİNÇ GÖKÇE": 50,
+        "BURAK GÜL" : 50,
+        "AKSARAY SIGORTA" : 60,
+        "YAVUZ ÇİPİL" : 75,
+        "BARMAK SIGORTA" : 50,
+        "DİLARA YILDIZ" : 50,
+        "ERBA NİLGÜN" : 50,
+        "KİRKİZ SİGORTA" : 50
+        
+        
+    }
 
     # --------------------------------------------------
     # KOLON İSİMLERİNİ TEMİZLE
@@ -385,12 +407,25 @@ def run_etl(data):
         ]
         oranlar = [0.55, 0.60, 0.65]
 
+        # önce barem oranını hesapla
         df["Komisyon Oranı"] = np.select(kosullar, oranlar, default=0)
+
+        # POLIPEDIA özel durum
         df.loc[df["Dış Acente Adı"] == "POLIPEDIA", "Komisyon Oranı"] = 1.0
+
+        # sabit komisyon verilen acenteleri işaretle
+        df["Sabit Komisyonlu Mu?"] = df["Dış Acente Adı"].isin(manuel_komisyonlar.keys())
+
+        # sabit oranları uygula
+        for acente, oran in manuel_komisyonlar.items():
+            df.loc[df["Dış Acente Adı"] == acente, "Komisyon Oranı"] = oran / 100
+
         df["Komisyon Oranı (%)"] = (df["Komisyon Oranı"] * 100).round(2)
+
     else:
         df["Komisyon Oranı"] = 0
         df["Komisyon Oranı (%)"] = 0
+        df["Sabit Komisyonlu Mu?"] = False
 
     df["Acente Komisyon Kazancı"] = np.where(
         df["Dış Acente Adı"] != "POLIPEDIA",
@@ -637,12 +672,12 @@ with tab1:
         pd.to_numeric(df_filtre.get("Acenteden Gelen Komisyon", 0), errors="coerce").fillna(0).sum()
     )
 
-    # Dağıtılan Komisyon = Tali Komisyon Toplamı / Asıl Komisyon (POLIPEDIA hariç)
+    # Dağıtılan Komisyon = Acente Komisyon Kazancı Toplamı / Asıl Komisyon (POLIPEDIA hariç)
     acente_kolon = "Dış Acente Adı" if "Dış Acente Adı" in df_filtre.columns else "Acente Adı"
     asil_komisyon_kolon = "Asıl Komisyon" if "Asıl Komisyon" in df_filtre.columns else "Toplam Komisyon"
 
-    toplam_tali_komisyon = pd.to_numeric(
-        df_filtre["Tali Komisyon"], errors="coerce"
+    toplam_acente_komisyonu = pd.to_numeric(
+        df_filtre["Acente Komisyon Kazancı"], errors="coerce"
     ).fillna(0).sum()
 
     toplam_asil_komisyon_polipedia_haric = pd.to_numeric(
@@ -654,11 +689,12 @@ with tab1:
     ).fillna(0).sum()
 
     dagitilan_komisyon = (
-        (toplam_tali_komisyon / toplam_asil_komisyon_polipedia_haric) * 100
+        (toplam_acente_komisyonu / toplam_asil_komisyon_polipedia_haric) * 100
         if toplam_asil_komisyon_polipedia_haric != 0 else 0
     )
 
-    col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
+    kpi_row1 = st.columns(4)
+    kpi_row2 = st.columns(4)
     def tr_fmt(x, d=0, currency=False, percent=False):
         try:
             x = float(x)
@@ -687,14 +723,15 @@ with tab1:
         """
 
 
-    col1.markdown(kpi("Toplam Poliçe Adet", tr_fmt(toplam_poliçe, d=0)), unsafe_allow_html=True)
-    col2.markdown(kpi("Toplam Net Prim", tr_fmt(toplam_net_prim, d=0, currency=True)), unsafe_allow_html=True)
-    col3.markdown(kpi("Acente Poliçe Adet", tr_fmt(toplam_acente_adet, d=0)), unsafe_allow_html=True)
-    col4.markdown(kpi("Polipedia Poliçe Adet", tr_fmt(toplam_polipedia_adet, d=0)), unsafe_allow_html=True)
-    col5.markdown(kpi("Acente Komisyon", tr_fmt(toplam_acente_komisyon, d=0, currency=True)), unsafe_allow_html=True)
-    col6.markdown(kpi("Polipedia Komisyon", tr_fmt(toplam_polipedia_komisyon, d=0, currency=True)), unsafe_allow_html=True)
-    col7.markdown(kpi("Polipedia Gelir", tr_fmt(toplam_yk_kazanc, d=0, currency=True)), unsafe_allow_html=True)
-    col8.markdown(kpi("Dağıtılan Komisyon", tr_fmt(dagitilan_komisyon, d=2, percent=True)), unsafe_allow_html=True)
+    kpi_row1[0].markdown(kpi("Toplam Poliçe Adet", tr_fmt(toplam_poliçe, d=0)), unsafe_allow_html=True)
+    kpi_row1[1].markdown(kpi("Toplam Net Prim", tr_fmt(toplam_net_prim, d=0, currency=True)), unsafe_allow_html=True)
+    kpi_row1[2].markdown(kpi("Acente Poliçe Adet", tr_fmt(toplam_acente_adet, d=0)), unsafe_allow_html=True)
+    kpi_row1[3].markdown(kpi("Polipedia Poliçe Adet", tr_fmt(toplam_polipedia_adet, d=0)), unsafe_allow_html=True)
+
+    kpi_row2[0].markdown(kpi("Acente Komisyon", tr_fmt(toplam_acente_komisyon, d=0, currency=True)), unsafe_allow_html=True)
+    kpi_row2[1].markdown(kpi("Polipedia Komisyon", tr_fmt(toplam_polipedia_komisyon, d=0, currency=True)), unsafe_allow_html=True)
+    kpi_row2[2].markdown(kpi("Polipedia Gelir", tr_fmt(toplam_yk_kazanc, d=0, currency=True)), unsafe_allow_html=True)
+    kpi_row2[3].markdown(kpi("Dağıtılan Komisyon", tr_fmt(dagitilan_komisyon, d=2, percent=True)), unsafe_allow_html=True)
 
     st.divider()
 
@@ -1033,75 +1070,81 @@ with tab1:
     # --------------------------------------------------
     # ACENTE ANALİZ
     # --------------------------------------------------
+    # --------------------------------------------------
+    # ACENTE ANALİZ TABLOSU
+    # --------------------------------------------------
     st.subheader("📊 Aylık Acente Net Prim (Polipedia Hariç)")
 
-    df_acente = df_filtre[
-        df_filtre["Acente Adı"].fillna("").str.upper() != "POLIPEDIA"
-    ].copy()
+    df_acente = df_filtre[df_filtre["Acente Adı"].fillna("").str.upper() != "POLIPEDIA"].copy()
 
-    df_acente_aylik = df_acente.groupby(
-        ["Acente Adı", "Ay"],
-        dropna=False
-    ).agg({
+    df_acente_aylik = df_acente.groupby(["Acente Adı", "Ay"], dropna=False).agg({
         "Acente Net Prim": "sum",
         "Toplam Komisyon": "sum",
         "Acente Komisyon Kazancı": "sum"
     }).reset_index()
 
-    pivot = df_acente_aylik.pivot(
-        index="Acente Adı",
-        columns="Ay",
-        values="Acente Net Prim"
-    ).fillna(0)
-
-    pivot_display = pivot.map(lambda x: tr_fmt(x, d=0, currency=True)) if not pivot.empty else pivot
-    st.dataframe(pivot_display, use_container_width=True)
+    if not df_acente_aylik.empty:
+        pivot = df_acente_aylik.pivot(index="Acente Adı", columns="Ay", values="Acente Net Prim").fillna(0)
+        st.dataframe(pivot.map(lambda x: tr_fmt(x, d=0, currency=True)), use_container_width=True)
 
     # --------------------------------------------------
-    # BAREM
+    # GÜNCEL BAREM ANALİZİ (MANUEL AYRIMLI)
     # --------------------------------------------------
-    def barem(x):
-        if x <= 250000:
-            return "0-250K", 55, 250000 - x
-        elif x <= 500000:
-            return "250K-500K", 60, 500000 - x
+    st.subheader("📊 Barem Analizi")
+
+    def barem_sistemi(row):
+        # Manuel acente mi kontrol et (Sabit Komisyonlu Mu sütununa bakarak)
+        is_manual = row.get("Sabit Komisyonlu Mu?", False)
+        
+        if is_manual:
+            return pd.Series({
+                "Barem": "Özel Anlaşma", 
+                "Kom_Oran": row.get("Komisyon Oranı (%)", 0), 
+                "Kalan_Tutar": 0
+            })
+        
+        # Değilse cirosuna göre bareme sok
+        np_deger = row["Acente Net Prim"]
+        if np_deger <= 250000:
+            return pd.Series({"Barem": "0-250K", "Kom_Oran": 55.0, "Kalan_Tutar": 250000 - np_deger})
+        elif np_deger <= 500000:
+            return pd.Series({"Barem": "250K-500K", "Kom_Oran": 60.0, "Kalan_Tutar": 500000 - np_deger})
         else:
-            return "500K+", 65, 0
+            return pd.Series({"Barem": "500K+", "Kom_Oran": 65.0, "Kalan_Tutar": 0})
 
     if not df_acente_aylik.empty:
-        df_acente_aylik[["Barem", "Komisyon %", "Bir Üst Bareme Kalan Tutar"]] = (
-            df_acente_aylik["Acente Net Prim"].apply(lambda x: pd.Series(barem(x)))
-        )
+        # Sütun güvenliği için dict kontrolü
+        agg_dict = {"Komisyon Oranı (%)": "first"}
+        if "Sabit Komisyonlu Mu?" in df_filtre.columns:
+            agg_dict["Sabit Komisyonlu Mu?"] = "first"
+        
+        helper = df_filtre.groupby(["Acente Adı", "Ay"]).agg(agg_dict).reset_index()
+        
+        # Sütun yoksa oluştur (KeyError'u engeller)
+        if "Sabit Komisyonlu Mu?" not in helper.columns:
+            helper["Sabit Komisyonlu Mu?"] = False
+
+        df_b_input = df_acente_aylik.merge(helper, on=["Acente Adı", "Ay"], how="left")
+        res_barem = df_b_input.apply(barem_sistemi, axis=1)
+        df_b_final = pd.concat([df_b_input, res_barem], axis=1)
+        
+        # Görüntüleme formatı
+        df_b_disp = df_b_final.copy()
+        df_b_disp["Acente Net Prim"] = df_b_disp["Acente Net Prim"].apply(lambda x: tr_fmt(x, d=0, currency=True))
+        df_b_disp["Acente Komisyon Kazancı"] = df_b_disp["Acente Komisyon Kazancı"].apply(lambda x: tr_fmt(x, d=0, currency=True))
+        df_b_disp["Kalan_Tutar"] = df_b_disp["Kalan_Tutar"].apply(lambda x: tr_fmt(x, d=0, currency=True))
+        df_b_disp["Kom_Oran"] = df_b_disp["Kom_Oran"].apply(lambda x: tr_fmt(x, d=2, percent=True))
+
+        final_cols = {
+            "Acente Adı": "Acente Adı", "Ay": "Ay", 
+            "Acente Net Prim": "Net Prim", "Acente Komisyon Kazancı": "Komisyon Kazancı",
+            "Kom_Oran": "Oran (%)", "Barem": "Barem Durumu", "Kalan_Tutar": "Üst Bareme Kalan"
+        }
+        st.dataframe(df_b_disp[list(final_cols.keys())].rename(columns=final_cols), use_container_width=True, hide_index=True)
     else:
-        df_acente_aylik["Barem"] = ""
-        df_acente_aylik["Komisyon %"] = 0
-        df_acente_aylik["Bir Üst Bareme Kalan Tutar"] = 0
+        st.info("Barem analizi için veri bulunamadı.")
 
-    df_barem = df_acente_aylik[
-        [
-            "Acente Adı",
-            "Ay",
-            "Acente Net Prim",
-            "Toplam Komisyon",
-            "Acente Komisyon Kazancı",
-            "Komisyon %",
-            "Barem",
-            "Bir Üst Bareme Kalan Tutar"
-        ]
-    ].copy()
-
-    if not df_barem.empty:
-        df_barem["Acente Net Prim"] = df_barem["Acente Net Prim"].apply(lambda x: tr_fmt(x, d=0, currency=True))
-        df_barem["Toplam Komisyon"] = df_barem["Toplam Komisyon"].apply(lambda x: tr_fmt(x, d=0, currency=True))
-        df_barem["Acente Komisyon Kazancı"] = df_barem["Acente Komisyon Kazancı"].apply(lambda x: tr_fmt(x, d=0, currency=True))
-        df_barem["Bir Üst Bareme Kalan Tutar"] = df_barem["Bir Üst Bareme Kalan Tutar"].apply(lambda x: tr_fmt(x, d=0, currency=True))
-        df_barem["Komisyon %"] = df_barem["Komisyon %"].apply(lambda x: tr_fmt(x, d=2, percent=True))
-
-    st.subheader("📊 Barem Analizi")
-    st.dataframe(df_barem, use_container_width=True)
-
-    st.divider()
-
+    
     # --------------------------------------------------
     # ACENTE BAZINDA AYLIK BRANŞ ORANLARI
     # --------------------------------------------------
@@ -1396,7 +1439,7 @@ with tab1:
 
     st.divider()    
 
-with tab2:
+    # BURADAN BAŞLAYARAK SEÇ...
     st.subheader("💰 Muhasebe ve Komisyon Düzenleme")
     
     # 1. DB'den veriyi çek
@@ -1430,6 +1473,7 @@ with tab2:
         else:
             st.warning("Henüz veritabanında muhasebe kaydı yok. Lütfen dashboard verisini yükleyin.")
             st.stop()
+    # ... BURAYA KADAR SİL. (Aşağıdaki CSS kısmına dokunma)
 
     # --- PREMIUM CSS (Tüm Butonlar ve Kartlar İçin) ---
     st.markdown("""
