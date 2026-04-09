@@ -781,7 +781,7 @@ with tab1:
     kpi_row1[2].markdown(kpi("Acente Poliçe Adet", tr_fmt(toplam_acente_adet, d=0)), unsafe_allow_html=True)
     kpi_row1[3].markdown(kpi("Polipedia Poliçe Adet", tr_fmt(toplam_polipedia_adet, d=0)), unsafe_allow_html=True)
 
-    kpi_row2[0].markdown(kpi("Acente Komisyon", tr_fmt(toplam_acente_komisyon, d=0, currency=True)), unsafe_allow_html=True)
+    kpi_row2[0].markdown(kpi("Acente Komisyon", tr_fmt(toplam_acente_komisyon, d=2, currency=True)), unsafe_allow_html=True)
     kpi_row2[1].markdown(kpi("Polipedia Komisyon", tr_fmt(toplam_polipedia_komisyon, d=0, currency=True)), unsafe_allow_html=True)
     kpi_row2[2].markdown(kpi("Polipedia Gelir", tr_fmt(toplam_yk_kazanc, d=0, currency=True)), unsafe_allow_html=True)
     kpi_row2[3].markdown(kpi("Dağıtılan Komisyon", tr_fmt(dagitilan_komisyon, d=2, percent=True)), unsafe_allow_html=True)
